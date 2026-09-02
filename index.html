@@ -1,0 +1,538 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO -->
+  <title>Nexus Tech â€” Tecnologia que conecta vocÃª ao futuro</title>
+  <meta name="description" content="Nexus Tech: loja online de tecnologia e informÃ¡tica. Notebooks, monitores, teclados, mouses, headsets, celulares, games e acessÃ³rios com os melhores preÃ§os.">
+  <meta name="keywords" content="e-commerce, tecnologia, informÃ¡tica, notebooks, monitores, celulares, games, Nexus Tech">
+  <meta property="og:title" content="Nexus Tech â€” Tecnologia que conecta vocÃª ao futuro">
+  <meta property="og:type" content="website">
+  <meta property="og:description" content="Loja online de tecnologia e informÃ¡tica. Produtos de alta qualidade com os melhores preÃ§os.">
+
+  <!-- Favicon (placeholder SVG) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' fill='%2306b6d4'>N</text></svg>">
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="home">
+
+  <!-- ============================================================
+       HEADER
+  ============================================================= -->
+  <header class="site-header" id="site-header">
+    <div class="container site-header__inner">
+
+      <!-- BotÃ£o hamburguer (mobile) -->
+      <button
+        type="button"
+        class="nav-toggle"
+        id="nav-toggle"
+        aria-label="Abrir menu"
+        aria-expanded="false"
+        aria-controls="main-nav"
+      >
+        <span class="nav-toggle__bar"></span>
+        <span class="nav-toggle__bar"></span>
+        <span class="nav-toggle__bar"></span>
+      </button>
+
+      <!-- Logo -->
+      <a href="index.html" class="site-header__logo" aria-label="Nexus Tech â€” PÃ¡gina inicial">
+        <span class="site-header__logo-mark">NEXUS</span>
+        <span class="site-header__logo-accent">TECH</span>
+      </a>
+
+      <!-- Menu de navegaÃ§Ã£o -->
+      <nav class="main-nav" id="main-nav" aria-label="Menu principal">
+        <ul class="main-nav__list">
+          <li><a href="index.html" class="main-nav__link is-active">Home</a></li>
+          <li><a href="pages/produtos.html" class="main-nav__link">Produtos</a></li>
+          <li><a href="#ofertas" class="main-nav__link">Ofertas</a></li>
+          <li><a href="#contato" class="main-nav__link">Contato</a></li>
+        </ul>
+      </nav>
+
+      <!-- Busca (visual nesta Sprint) -->
+      <form class="site-header__search search" role="search" aria-label="Buscar produtos">
+        <span class="search__icon" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </span>
+        <label class="sr-only" for="search-header">Buscar produtos, marcas e categorias</label>
+        <input
+          type="search"
+          id="search-header"
+          name="q"
+          class="search__input"
+          placeholder="Buscar produtos, marcas e categorias..."
+          autocomplete="off"
+        >
+        <button type="submit" class="search__btn">Buscar</button>
+      </form>
+
+      <!-- AÃ§Ãµes do usuÃ¡rio -->
+      <div class="site-header__actions">
+
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label="Favoritos"
+        >
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+          </svg>
+          <span class="icon-btn__count" id="favorites-count" aria-hidden="true">0</span>
+          <span class="icon-btn__label">Favoritos</span>
+        </button>
+
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label="Carrinho de compras"
+        >
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="21" r="1"></circle>
+            <circle cx="20" cy="21" r="1"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+          <span class="icon-btn__count" id="cart-count" aria-hidden="true">0</span>
+          <span class="icon-btn__label">Carrinho</span>
+        </button>
+
+        <a href="pages/perfil.html" class="icon-btn icon-btn__label--account" aria-label="Minha conta">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          <span class="icon-btn__label">Minha conta</span>
+        </a>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       CONTEÃšDO PRINCIPAL
+  ============================================================= -->
+  <main>
+
+    <!-- HERO / BANNER -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="container hero__grid">
+        <div class="hero__content">
+          <p class="hero__eyebrow">Nexus Tech</p>
+          <h1 id="hero-title" class="hero__title">
+            Tecnologia que conecta <span class="hero__title-highlight">vocÃª ao futuro</span>
+          </h1>
+          <p class="hero__subtitle">
+            Os melhores produtos para o seu setup, trabalho e entretenimento â€” com os melhores preÃ§os do mercado.
+          </p>
+          <a href="pages/produtos.html" class="btn btn--primary btn--lg hero__cta">Ver produtos</a>
+        </div>
+
+        <div class="hero__media" aria-hidden="true">
+          <div class="hero__device"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CATEGORIAS -->
+    <section class="categories" aria-labelledby="categories-title">
+      <div class="container">
+        <h2 id="categories-title" class="section-title">Encontre o que vocÃª precisa</h2>
+
+        <ul class="categories__list">
+          <li>
+            <a href="pages/produtos.html" class="categories__card">
+              <span class="categories__icon" aria-hidden="true">ðŸ’»</span>
+              Notebooks
+            </a>
+          </li>
+          <li>
+            <a href="pages/produtos.html" class="categories__card">
+              <span class="categories__icon" aria-hidden="true">ðŸ–¥ï¸</span>
+              Monitores
+            </a>
+          </li>
+          <li>
+            <a href="pages/produtos.html" class="categories__card">
+              <span class="categories__icon" aria-hidden="true">âŒ¨ï¸</span>
+              Teclados
+            </a>
+          </li>
+          <li>
+            <a href="pages/produtos.html" class="categories__card">
+              <span class="categories__icon" aria-hidden="true">ðŸ–±ï¸</span>
+              Mouses
+            </a>
+          </li>
+          <li>
+            <a href="pages/produtos.html" class="categories__card">
+              <span class="categories__icon" aria-hidden="true">ðŸŽ§</span>
+              Headsets
+            </a>
+          </li>
+          <li>
+            <a href="pages/produtos.html" class="categories__card">
+              <span class="categories__icon" aria-hidden="true">ðŸ“±</span>
+              Celulares
+            </a>
+          </li>
+          <li>
+            <a href="pages/produtos.html" class="categories__card">
+              <span class="categories__icon" aria-hidden="true">ðŸŽ®</span>
+              Games
+            </a>
+          </li>
+          <li>
+            <a href="pages/produtos.html" class="categories__card">
+              <span class="categories__icon" aria-hidden="true">ðŸ”Œ</span>
+              AcessÃ³rios
+            </a>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- PRODUTOS EM DESTAQUE -->
+    <section class="products-section" aria-labelledby="featured-title">
+      <div class="container">
+        <h2 id="featured-title" class="section-title">Produtos em destaque</h2>
+
+        <div class="products-grid" id="featured-grid">
+
+          <!-- Card estÃ¡tico de exemplo (dados dinÃ¢micos virÃ£o na Sprint 3) -->
+          <article class="product-card" aria-label="Notebook Nexus A15">
+            <div class="product-card__media">
+              <div class="product-card__badges">
+                <span class="badge badge--discount">-13%</span>
+              </div>
+              <button type="button" class="product-card__fav" aria-label="Favoritar Notebook Nexus A15">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+              </button>
+              <span class="product-card__placeholder">(imagem)</span>
+            </div>
+            <div class="product-card__body">
+              <span class="product-card__brand">Nexus</span>
+              <h3 class="product-card__name">Notebook Nexus A15</h3>
+              <div class="rating">
+                <span class="rating__stars" aria-hidden="true">â˜…â˜…â˜…â˜…â˜…</span>
+                <span class="rating__value">4.6</span>
+                <span class="rating__count">(128)</span>
+              </div>
+              <div class="product-card__price">
+                <span class="product-card__price-old">R$ 4.599,90</span>
+                <span class="product-card__price-current">R$ 3.999,90</span>
+              </div>
+              <div class="product-card__actions">
+                <button type="button" class="btn btn--primary btn--block">Adicionar ao carrinho</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card estÃ¡tico de exemplo -->
+          <article class="product-card" aria-label="Monitor Nexus 27 polegadas">
+            <div class="product-card__media">
+              <div class="product-card__badges">
+                <span class="badge badge--new">Novo</span>
+              </div>
+              <button type="button" class="product-card__fav" aria-label="Favoritar Monitor Nexus 27">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+              </button>
+              <span class="product-card__placeholder">(imagem)</span>
+            </div>
+            <div class="product-card__body">
+              <span class="product-card__brand">Nexus</span>
+              <h3 class="product-card__name">Monitor Nexus 27" QHD</h3>
+              <div class="rating">
+                <span class="rating__stars" aria-hidden="true">â˜…â˜…â˜…â˜…â˜†</span>
+                <span class="rating__value">4.4</span>
+                <span class="rating__count">(86)</span>
+              </div>
+              <div class="product-card__price">
+                <span class="product-card__price-old">R$ 1.299,90</span>
+                <span class="product-card__price-current">R$ 1.049,90</span>
+              </div>
+              <div class="product-card__actions">
+                <button type="button" class="btn btn--primary btn--block">Adicionar ao carrinho</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card estÃ¡tico de exemplo -->
+          <article class="product-card" aria-label="Teclado mecÃ¢nico Nexus RGB">
+            <div class="product-card__media">
+              <div class="product-card__badges">
+                <span class="badge badge--discount">-20%</span>
+              </div>
+              <button type="button" class="product-card__fav" aria-label="Favoritar Teclado Nexus RGB">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+              </button>
+              <span class="product-card__placeholder">(imagem)</span>
+            </div>
+            <div class="product-card__body">
+              <span class="product-card__brand">Nexus</span>
+              <h3 class="product-card__name">Teclado MecÃ¢nico Nexus RGB</h3>
+              <div class="rating">
+                <span class="rating__stars" aria-hidden="true">â˜…â˜…â˜…â˜…â˜…</span>
+                <span class="rating__value">4.8</span>
+                <span class="rating__count">(312)</span>
+              </div>
+              <div class="product-card__price">
+                <span class="product-card__price-old">R$ 499,90</span>
+                <span class="product-card__price-current">R$ 399,90</span>
+              </div>
+              <div class="product-card__actions">
+                <button type="button" class="btn btn--primary btn--block">Adicionar ao carrinho</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card estÃ¡tico de exemplo -->
+          <article class="product-card" aria-label="Headset gamer Nexus Pro">
+            <div class="product-card__media">
+              <div class="product-card__badges">
+                <span class="badge badge--bestseller">Mais vendido</span>
+              </div>
+              <button type="button" class="product-card__fav" aria-label="Favoritar Headset Nexus Pro">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+              </button>
+              <span class="product-card__placeholder">(imagem)</span>
+            </div>
+            <div class="product-card__body">
+              <span class="product-card__brand">Nexus</span>
+              <h3 class="product-card__name">Headset Gamer Nexus Pro</h3>
+              <div class="rating">
+                <span class="rating__stars" aria-hidden="true">â˜…â˜…â˜…â˜…â˜…</span>
+                <span class="rating__value">4.9</span>
+                <span class="rating__count">(540)</span>
+              </div>
+              <div class="product-card__price">
+                <span class="product-card__price-current">R$ 299,90</span>
+              </div>
+              <div class="product-card__actions">
+                <button type="button" class="btn btn--primary btn--block">Adicionar ao carrinho</button>
+              </div>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- OFERTAS DA SEMANA -->
+    <section class="container offers" id="ofertas" aria-labelledby="offers-title">
+      <div>
+        <p class="offers__eyebrow">Ofertas da semana</p>
+        <h2 id="offers-title" class="offers__title">AtÃ© 30% OFF em produtos selecionados</h2>
+        <p class="offers__text">Aproveite descontos exclusivos em itens escolhidos a dedo.</p>
+      </div>
+      <a href="pages/produtos.html" class="btn btn--lg offers__cta">Conferir ofertas</a>
+    </section>
+
+    <!-- MAIS VENDIDOS -->
+    <section class="products-section products-section--alt" aria-labelledby="bestsellers-title">
+      <div class="container">
+        <h2 id="bestsellers-title" class="section-title">Mais vendidos</h2>
+
+        <div class="products-grid" id="bestsellers-grid">
+
+          <!-- Card estÃ¡tico de exemplo (dados dinÃ¢micos virÃ£o na Sprint 3) -->
+          <article class="product-card" aria-label="Celular Nexus X20">
+            <div class="product-card__media">
+              <div class="product-card__badges">
+                <span class="badge badge--bestseller">Mais vendido</span>
+              </div>
+              <button type="button" class="product-card__fav" aria-label="Favoritar Celular Nexus X20">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+              </button>
+              <span class="product-card__placeholder">(imagem)</span>
+            </div>
+            <div class="product-card__body">
+              <span class="product-card__brand">Nexus</span>
+              <h3 class="product-card__name">Celular Nexus X20</h3>
+              <div class="rating">
+                <span class="rating__stars" aria-hidden="true">â˜…â˜…â˜…â˜…â˜†</span>
+                <span class="rating__value">4.5</span>
+                <span class="rating__count">(920)</span>
+              </div>
+              <div class="product-card__price">
+                <span class="product-card__price-old">R$ 2.999,90</span>
+                <span class="product-card__price-current">R$ 2.499,90</span>
+              </div>
+              <div class="product-card__actions">
+                <button type="button" class="btn btn--primary btn--block">Adicionar ao carrinho</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card estÃ¡tico de exemplo -->
+          <article class="product-card" aria-label="Mouse gamer Nexus M1">
+            <div class="product-card__media">
+              <button type="button" class="product-card__fav" aria-label="Favoritar Mouse Nexus M1">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+              </button>
+              <span class="product-card__placeholder">(imagem)</span>
+            </div>
+            <div class="product-card__body">
+              <span class="product-card__brand">Nexus</span>
+              <h3 class="product-card__name">Mouse Gamer Nexus M1</h3>
+              <div class="rating">
+                <span class="rating__stars" aria-hidden="true">â˜…â˜…â˜…â˜…â˜…</span>
+                <span class="rating__value">4.7</span>
+                <span class="rating__count">(780)</span>
+              </div>
+              <div class="product-card__price">
+                <span class="product-card__price-current">R$ 149,90</span>
+              </div>
+              <div class="product-card__actions">
+                <button type="button" class="btn btn--primary btn--block">Adicionar ao carrinho</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card estÃ¡tico de exemplo -->
+          <article class="product-card" aria-label="Notebook Nexus Ultra">
+            <div class="product-card__media">
+              <div class="product-card__badges">
+                <span class="badge badge--discount">-10%</span>
+              </div>
+              <button type="button" class="product-card__fav" aria-label="Favoritar Notebook Nexus Ultra">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+              </button>
+              <span class="product-card__placeholder">(imagem)</span>
+            </div>
+            <div class="product-card__body">
+              <span class="product-card__brand">Nexus</span>
+              <h3 class="product-card__name">Notebook Nexus Ultra Pro</h3>
+              <div class="rating">
+                <span class="rating__stars" aria-hidden="true">â˜…â˜…â˜…â˜…â˜…</span>
+                <span class="rating__value">4.9</span>
+                <span class="rating__count">(421)</span>
+              </div>
+              <div class="product-card__price">
+                <span class="product-card__price-old">R$ 7.999,90</span>
+                <span class="product-card__price-current">R$ 7.199,90</span>
+              </div>
+              <div class="product-card__actions">
+                <button type="button" class="btn btn--primary btn--block">Adicionar ao carrinho</button>
+              </div>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- NEWSLETTER -->
+    <section class="newsletter" aria-labelledby="newsletter-title">
+      <div class="container newsletter__inner">
+        <h2 id="newsletter-title" class="newsletter__title">Fique por dentro das novidades</h2>
+        <p class="newsletter__text">
+          Cadastre-se e receba em primeira mÃ£o ofertas, lanÃ§amentos e conteÃºdos exclusivos da Nexus Tech.
+        </p>
+        <form class="newsletter__form" id="newsletter-form">
+          <label class="sr-only" for="newsletter-email">Seu melhor e-mail</label>
+          <input
+            type="email"
+            id="newsletter-email"
+            class="newsletter__input"
+            placeholder="Seu melhor e-mail"
+            autocomplete="email"
+            required
+          >
+          <button type="submit" class="btn btn--primary">Assinar</button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       FOOTER
+  ============================================================= -->
+  <footer class="site-footer" id="contato" role="contentinfo">
+    <div class="container">
+
+      <div class="site-footer__grid">
+
+        <div class="site-footer__brand-col">
+          <p class="site-footer__brand">NEXUS<span class="site-footer__brand-accent">TECH</span></p>
+          <p class="site-footer__tagline">Tecnologia que conecta vocÃª ao futuro.</p>
+        </div>
+
+        <nav aria-label="Loja">
+          <p class="site-footer__heading">Loja</p>
+          <ul class="site-footer__list">
+            <li><a href="pages/produtos.html" class="site-footer__link">Produtos</a></li>
+            <li><a href="#ofertas" class="site-footer__link">Ofertas</a></li>
+            <li><a href="#bestsellers-title" class="site-footer__link">Mais vendidos</a></li>
+          </ul>
+        </nav>
+
+        <nav aria-label="Atendimento">
+          <p class="site-footer__heading">Atendimento</p>
+          <ul class="site-footer__list">
+            <li><a href="#" class="site-footer__link">Central de ajuda</a></li>
+            <li><a href="#" class="site-footer__link">Contato</a></li>
+            <li><a href="#" class="site-footer__link">FAQ</a></li>
+          </ul>
+        </nav>
+
+        <nav aria-label="Institucional">
+          <p class="site-footer__heading">Institucional</p>
+          <ul class="site-footer__list">
+            <li><a href="#" class="site-footer__link">Sobre nÃ³s</a></li>
+            <li><a href="#" class="site-footer__link">Privacidade</a></li>
+            <li><a href="#" class="site-footer__link">Termos</a></li>
+          </ul>
+        </nav>
+
+        <div>
+          <p class="site-footer__heading">Redes sociais</p>
+          <div class="site-footer__social">
+            <a href="#" class="site-footer__social-btn" aria-label="Instagram">IG</a>
+            <a href="#" class="site-footer__social-btn" aria-label="Facebook">FB</a>
+            <a href="#" class="site-footer__social-btn" aria-label="YouTube">YT</a>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="site-footer__bottom">
+        <div class="site-footer__payments" aria-label="Formas de pagamento aceitas">
+          <span class="pay-badge">VISA</span>
+          <span class="pay-badge">MASTERCARD</span>
+          <span class="pay-badge">PIX</span>
+          <span class="pay-badge">BOLETO</span>
+        </div>
+        <p class="site-footer__copy">Â© <span id="footer-year">2026</span> Nexus Tech. Todos os direitos reservados.</p>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- JS â€” apenas interaÃ§Ã£o visual do header (menu mobile) -->
+  <script src="assets/js/modules/header.js"></script>
+</body>
+</html>
