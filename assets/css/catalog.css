@@ -1,0 +1,116 @@
+/* ==========================================================================
+   NEXUS TECH — Catálogo de Produtos
+   Cabeçalho da página, breadcrumb, contador e grid do catálogo.
+   ========================================================================== */
+
+.catalog {
+  padding-block: var(--space-6) var(--space-8);
+}
+
+/* --------------------------------------------------------------------------
+   CABEÇALHO DA PÁGINA
+-------------------------------------------------------------------------- */
+
+.catalog__header {
+  margin-bottom: var(--space-6);
+}
+
+.catalog__title {
+  font-size: var(--text-3xl);
+  margin-top: var(--space-2);
+}
+
+.catalog__title-accent {
+  color: var(--color-primary);
+}
+
+.catalog__note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.catalog__count {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit-min);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  font-weight: var(--font-bold);
+}
+
+/* --------------------------------------------------------------------------
+   BREADCRUMB
+-------------------------------------------------------------------------- */
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.breadcrumb__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.breadcrumb__link {
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast);
+}
+
+.breadcrumb__link:hover {
+  color: var(--color-primary-text);
+}
+
+.breadcrumb__separator {
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.breadcrumb__current {
+  color: var(--color-text);
+  font-weight: var(--font-semibold);
+}
+
+/* --------------------------------------------------------------------------
+   GRID DO CATÁLOGO
+   Mantém os breakpoints do projeto. Adiciona o degrau de tablet (768px)
+   para distribuir melhor 2 → 4 colunas.
+-------------------------------------------------------------------------- */
+
+.catalog__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+@media (min-width: 600px) {
+  .catalog__grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 768px) {
+  .catalog__grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 900px) {
+  .catalog__grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 1200px) {
+  .catalog__grid { grid-template-columns: repeat(4, 1fr); }
+}
