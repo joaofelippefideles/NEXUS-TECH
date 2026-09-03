@@ -22,3 +22,6 @@
 
 /* 6. Página Home */
 @import url("home.css");
+
+/* 7. Catálogo de produtos */
+@import url("catalog.css");
