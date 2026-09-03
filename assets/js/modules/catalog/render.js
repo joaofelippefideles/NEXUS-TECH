@@ -1,22 +1,14 @@
 /* ==========================================================================
-   NEXUS TECH — Catálogo
-   Renderização dos produtos mockados no grid do catálogo (Sprint 3).
-
-   Responsabilidades:
-   - Contar e exibir a quantidade de produtos;
-   - Construir os cards de produtos no DOM (sem innerHTML / XSS);
-   - Preparar a interface para futura integração com API/backend.
-
-   Fora de escopo nesta Sprint (Sprint 4+):
-   - filtros, ordenação, busca, paginação, carrinho completo, favoritos.
+   NEXUS TECH — Catálogo: renderização (Sprint 4)
+   Construção dos cards de produto no DOM (segura, sem innerHTML / XSS),
+   estado vazio e metadados de resultados.
    ========================================================================== */
 
-import { products } from "../data/products.js";
 import {
   formatBRL,
   formatDiscount,
   formatDecimal,
-} from "../utils/format.js";
+} from "../../utils/format.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -53,7 +45,7 @@ function heartIcon() {
   return s;
 }
 
-/* Deterministic inline-SVG placeholder. Quando a API de imagens existir,
+/* Placeholder determinístico em SVG inline. Quando a API de imagens existir,
    bastará apontar `product.image` para a URL real — o render não muda. */
 function productImage(product) {
   const s = svg({
@@ -72,10 +64,7 @@ function productImage(product) {
   bg.setAttribute("y", "0");
   bg.setAttribute("width", "240");
   bg.setAttribute("height", "240");
-  bg.setAttribute(
-    "fill",
-    "url(#g" + product.id + ")"
-  );
+  bg.setAttribute("fill", "url(#g" + product.id + ")");
   s.appendChild(bg);
 
   const defs = document.createElementNS(SVG_NS, "defs");
@@ -138,7 +127,7 @@ function badgesFor(product) {
   return badges;
 }
 
-function createCard(product) {
+export function createCard(product) {
   const card = document.createElement("article");
   card.className = "product-card";
   card.setAttribute("aria-label", product.name);
@@ -229,8 +218,7 @@ function createCard(product) {
   viewBtn.textContent = "Ver produto";
   actions.appendChild(viewBtn);
 
-  /* Botão preparado para a futura integração de carrinho (Sprint 4+).
-     Nesta Sprint apenas marca o produto; nenhuma lógica de carrinho. */
+  /* Botão preparado para a futura integração de carrinho (Sprint 5+). */
   const cartBtn = document.createElement("button");
   cartBtn.type = "button";
   cartBtn.className = "btn btn--primary";
@@ -245,28 +233,54 @@ function createCard(product) {
   return card;
 }
 
-export function renderCatalog(gridEl, countEl) {
-  if (!gridEl) return;
-
-  gridEl.replaceChildren();
+export function renderCards(container, products) {
+  container.replaceChildren();
   const fragment = document.createDocumentFragment();
-
   for (const product of products) {
     fragment.appendChild(createCard(product));
   }
-
-  gridEl.appendChild(fragment);
-
-  if (countEl) {
-    const total = products.length;
-    countEl.textContent = `${total} produto${total === 1 ? "" : "s"}`;
-  }
+  container.appendChild(fragment);
 }
 
-/* Inicialização — roda apenas quando o grid do catálogo existe na página. */
-(function initCatalog() {
-  const gridEl = document.getElementById("product-grid");
-  const countEl = document.getElementById("product-count");
-  if (!gridEl) return;
-  renderCatalog(gridEl, countEl);
-})();
+export function renderEmptyState(container, hasQuery) {
+  container.replaceChildren();
+
+  const empty = document.createElement("div");
+  empty.className = "catalog__empty";
+  empty.setAttribute("role", "status");
+
+  const icon = svg({
+    class: "catalog__empty-icon",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    "stroke-width": "1.5",
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
+    "aria-hidden": "true",
+  });
+  icon.appendChild(
+    svgPath("M21 21l-4.35-4.35M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z")
+  );
+  empty.appendChild(icon);
+
+  const title = document.createElement("p");
+  title.className = "catalog__empty-title";
+  title.textContent = hasQuery
+    ? "Nenhum produto encontrado para sua busca"
+    : "Nenhum produto encontrado";
+  empty.appendChild(title);
+
+  const text = document.createElement("p");
+  text.className = "catalog__empty-text";
+  text.textContent =
+    "Tente ajustar a pesquisa ou limpar os filtros para ver mais resultados.";
+  empty.appendChild(text);
+
+  container.appendChild(empty);
+}
+
+export function renderMeta(countEl, from, to, total) {
+  if (!countEl) return;
+  countEl.textContent = `${total} produto${total === 1 ? "" : "s"}`;
+}

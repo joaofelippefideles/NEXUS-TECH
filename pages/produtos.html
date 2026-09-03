@@ -108,8 +108,7 @@
        CONTEÚDO PRINCIPAL — CATÁLOGO
   ============================================================= -->
   <main>
-
-    <section class="catalog" aria-labelledby="catalog-title">
+    <section class="catalog" aria-labelledby="catalog-title" id="catalog-app">
       <div class="container">
 
         <div class="catalog__header">
@@ -137,13 +136,29 @@
 
         </div>
 
-        <div class="catalog__grid" id="product-grid" aria-live="polite">
+        <div class="catalog__layout">
+
+          <!-- Barra lateral de filtros (populada via JS) -->
+          <div id="catalog-filters"></div>
+
+          <div class="catalog__main">
+
+            <!-- Barra de ordenação (populada via JS) -->
+            <div class="catalog__toolbar" id="catalog-sort-root"></div>
+
+            <!-- Grid de produtos -->
+            <div class="catalog__grid" id="product-grid" aria-live="polite">
+            </div>
+
+            <!-- Paginação (populada via JS) -->
+            <div id="catalog-pagination"></div>
+
+          </div>
 
         </div>
 
       </div>
     </section>
-
   </main>
 
   <!-- ============================================================
@@ -212,6 +227,6 @@
 
   <!-- JS -->
   <script src="../assets/js/modules/header.js"></script>
-  <script type="module" src="../assets/js/modules/catalog.js"></script>
+  <script type="module" src="../assets/js/modules/catalog/catalog.js"></script>
 </body>
 </html>
