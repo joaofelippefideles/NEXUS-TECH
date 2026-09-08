@@ -175,6 +175,7 @@ function buildGallery(product, onViewChange) {
     index = Math.max(0, Math.min(views.length - 1, index));
     main.replaceChildren();
     main.appendChild(productImage(product, index));
+    main.appendChild(status);
     status.textContent = `${labels[index]} — ${index + 1} de ${views.length}`;
 
     const btns = thumbs.querySelectorAll(".product-gallery__thumb");

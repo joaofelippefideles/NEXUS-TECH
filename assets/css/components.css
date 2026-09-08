@@ -404,6 +404,66 @@
 }
 
 /* --------------------------------------------------------------------------
+   STEPPER DE QUANTIDADE (página do produto e carrinho)
+-------------------------------------------------------------------------- */
+
+.qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.qty-stepper:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.qty-stepper__btn {
+  width: var(--hit-min);
+  height: var(--hit-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.qty-stepper__btn:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+}
+
+.qty-stepper__btn:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.qty-stepper__input {
+  width: 56px;
+  height: var(--hit-min);
+  border: none;
+  outline: none;
+  text-align: center;
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+  background: var(--color-surface);
+  color: var(--color-text);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.qty-stepper__input::-webkit-outer-spin-button,
+.qty-stepper__input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
    ALERTAS / FEEDBACK
 -------------------------------------------------------------------------- */
 

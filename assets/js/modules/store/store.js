@@ -61,6 +61,33 @@ export function removeFromCart(productId) {
   write(CART_KEY, cart);
 }
 
+/* Define a quantidade exata de um item. Usado pelo carrinho (stepper e
+   input de quantidade). `max` limita por estoque quando fornecido:
+   - quantidade <= 0 remove o item (retorna 0);
+   - quantidade > `max` não altera nada (retorna null);
+   - fracionárias são truncadas para inteiro positivo.
+   Retorna a nova quantidade (ou 0/null conforme os casos acima). */
+export function setCartQuantity(productId, qty, max = null) {
+  const id = String(productId);
+  const cart = getCart();
+  const parsed = Number(qty);
+  const value = Number.isFinite(parsed) ? Math.floor(parsed) : 0;
+
+  if (value <= 0) {
+    delete cart[id];
+    write(CART_KEY, cart);
+    return 0;
+  }
+
+  if (max !== null && value > Number(max)) {
+    return null;
+  }
+
+  cart[id] = value;
+  write(CART_KEY, cart);
+  return value;
+}
+
 export function clearCart() {
   write(CART_KEY, {});
 }
@@ -108,6 +135,7 @@ export const store = {
   getCart,
   getCartCount,
   addToCart,
+  setCartQuantity,
   removeFromCart,
   clearCart,
   getFavorites,
