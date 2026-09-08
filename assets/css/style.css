@@ -37,3 +37,6 @@
 
 /* 11. Checkout completo */
 @import url("checkout.css");
+
+/* 12. Perfil / Minha conta */
+@import url("profile.css");
