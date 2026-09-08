@@ -25,3 +25,6 @@
 
 /* 7. Catálogo de produtos */
 @import url("catalog.css");
+
+/* 8. Página do produto */
+@import url("product.css");
