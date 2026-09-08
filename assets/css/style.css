@@ -40,3 +40,6 @@
 
 /* 12. Perfil / Minha conta */
 @import url("profile.css");
+
+/* 13. Cadastro de usuário */
+@import url("auth.css");
