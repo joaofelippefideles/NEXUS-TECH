@@ -13,18 +13,20 @@
    - nenhuma chamada à API nesta etapa.
    ========================================================================== */
 
-import { products } from "../../data/products.js";
 import { formatBRL } from "../../utils/format.js";
 import {
-  getCart,
   removeFromCart,
   setCartQuantity,
   syncHeaderCounts,
 } from "../store/store.js";
+import {
+  calculateSubtotal,
+  FREE_SHIPPING_MIN_CENTS,
+  sanitizeCart,
+  standardShippingCents,
+} from "./cart-utils.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const FREE_SHIPPING_MIN_CENTS = 50000; // R$ 500,00
-const SHIPPING_CENTS = 2990; // R$ 29,90 (frete mock)
 
 /* Estado em memória: itens sanitizados { id -> { product, qty } } */
 const current = {
@@ -48,10 +50,6 @@ function iconPath(d, attrs) {
     path.setAttribute(key, attrs[key]);
   }
   return path;
-}
-
-function productById(id) {
-  return products.find((p) => p.id === id) || null;
 }
 
 /* --------------------------------------------------------------------------
@@ -116,55 +114,9 @@ function cartImage(product) {
 }
 
 /* --------------------------------------------------------------------------
-   CARREGAMENTO + SANITIZAÇÃO
+   CARREGAMENTO + SANITIZAÇÃO (regras em cart-utils.js — compartilhado
+   com o checkout)
 -------------------------------------------------------------------------- */
-
-/* Lê o localStorage, remove itens inválidos e ajusta quantidades ao estoque. */
-function loadSanitized() {
-  const cart = getCart();
-  const items = new Map();
-  let removed = 0;
-  let fixed = 0;
-
-  for (const [rawId, rawQty] of Object.entries(cart)) {
-    const id = Number(rawId);
-
-    if (!Number.isInteger(id) || id <= 0) {
-      removeFromCart(rawId);
-      removed++;
-      continue;
-    }
-
-    const product = productById(id);
-    if (!product) {
-      removeFromCart(rawId);
-      removed++;
-      continue;
-    }
-
-    const stock = Number(product.stock || 0);
-    if (stock <= 0) {
-      removeFromCart(rawId);
-      removed++;
-      continue;
-    }
-
-    const parsed = Number(rawQty);
-    const qty =
-      Number.isFinite(parsed) && parsed > 0
-        ? Math.min(stock, Math.max(1, Math.floor(parsed)))
-        : 1;
-
-    if (Number(rawQty) !== qty) {
-      fixed++;
-      setCartQuantity(String(id), qty, stock);
-    }
-
-    items.set(String(id), { product, qty });
-  }
-
-  return { items, removed, fixed };
-}
 
 /* --------------------------------------------------------------------------
    RENDERIZAÇÃO — ITEM
@@ -317,8 +269,8 @@ function buildSummary() {
   title.textContent = "Resumo do pedido";
   summary.appendChild(title);
 
-  const subtotalCents = calculateSubtotal();
-  const shipping = subtotalCents >= FREE_SHIPPING_MIN_CENTS ? 0 : SHIPPING_CENTS;
+  const subtotalCents = calculateSubtotal(current.items);
+  const shipping = standardShippingCents(subtotalCents);
   const totalCents = subtotalCents + shipping;
 
   const subtotalRow = document.createElement("div");
@@ -393,20 +345,6 @@ function buildSummary() {
   return summary;
 }
 
-function calcTotals() {
-  const subtotal = calculateSubtotal();
-  const shipping = subtotal >= FREE_SHIPPING_MIN_CENTS ? 0 : SHIPPING_CENTS;
-  return { subtotal, shipping, total: subtotal + shipping };
-}
-
-function calculateSubtotal() {
-  let sum = 0;
-  for (const { product, qty } of current.items.values()) {
-    sum += Number(product.priceCents) * qty;
-  }
-  return sum;
-}
-
 /* --------------------------------------------------------------------------
    RENDERIZAÇÃO — VAZIO
 -------------------------------------------------------------------------- */
@@ -468,7 +406,7 @@ function buildEmpty() {
 -------------------------------------------------------------------------- */
 
 function render(opts = {}) {
-  const loaded = loadSanitized();
+  const loaded = sanitizeCart();
   current.items = loaded.items;
   current.removed = loaded.removed;
   current.fixed = loaded.fixed;

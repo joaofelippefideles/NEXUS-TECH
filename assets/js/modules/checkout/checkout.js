@@ -1,0 +1,477 @@
+/* ==========================================================================
+   NEXUS TECH — Checkout completo (frontend simulado)
+   Etapas: Dados > Endereço > Entrega > Pagamento > Resumo do pedido.
+   Tudo mock/localStorage — nenhuma chamada à API, backend ou MySQL.
+
+   Regras:
+   - itens vêm do `nexus:cart` e são sanitizados com as mesmas regras do
+     carrinho (cart-utils.js);
+   - entrega padrão reusa a regra de frete do carrinho (>= R$ 500 -> grátis,
+     senão R$ 29,90); entrega expressa é upgrade fixo de R$ 49,90;
+   - dados financeiros (cartão/CVV) existem apenas em memória na sessão da
+     página — nada é persistido em localStorage/sessionStorage;
+   - confirmação simula um pedido (identificador fictício), limpa o carrinho
+     e evita duplicação ao recarregar (confirmação guardada apenas na sessão);
+   - DOM construído com createElement/textContent (sem innerHTML / XSS).
+   ========================================================================== */
+
+import { formatBRL } from "../../utils/format.js";
+import { clearCart, syncHeaderCounts } from "../store/store.js";
+import {
+  calculateSubtotal,
+  EXPRESS_CENTS,
+  sanitizeCart,
+  standardShippingCents,
+} from "../cart/cart-utils.js";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const SEQUENCE_KEY = "nexus:checkout:seq"; // contador simples e não sensível
+const CONFIRM_KEY = "nexus:checkout:last-order"; // confirmação da sessão
+const ORDER_PREFIX = "NT-";
+
+/* Opções de entrega simuladas. A padrão reutiliza a regra de frete do
+   carrinho (consistência obrigatória); a expressa é um upgrade opcional. */
+const SHIPPING_METHODS = [
+  {
+    id: "standard",
+    label: "Entrega padrão",
+    deadline: "5–8 dias úteis",
+    price: standardShippingCents,
+  },
+  {
+    id: "express",
+    label: "Entrega expressa",
+    deadline: "2–4 dias úteis",
+    price: () => EXPRESS_CENTS,
+  },
+];
+
+const VALIDATORS = {
+  name: (value) =>
+    value.trim().length >= 2 || "Informe seu nome completo (mínimo 2 letras).",
+  email: (value) =>
+    /^\S+@\S+\.\S+$/.test(value.trim()) || "Informe um e-mail válido.",
+  phone: (value) =>
+    normalizeDigits(value).length >= 8 ||
+    "Informe um telefone com DDD (mínimo 8 dígitos).",
+  cep: (value) =>
+    normalizeDigits(value).length === 8 ||
+    "Informe um CEP válido com 8 dígitos.",
+  street: (value) => value.trim().length >= 3 || "Informe a rua.",
+  number: (value) => value.trim() !== "" || "Informe o número.",
+  complement: () => "",
+  neighborhood: (value) => value.trim().length >= 2 || "Informe o bairro.",
+  city: (value) => value.trim().length >= 2 || "Informe a cidade.",
+  state: (value) => value !== "" || "Selecione o estado (UF).",
+  cardNumber: (value) => {
+    const digits = normalizeDigits(value);
+    return (
+      (digits.length >= 13 && digits.length <= 19) ||
+      "Informe um número de cartão válido (13 a 19 dígitos)."
+    );
+  },
+  cardName: (value) =>
+    value.trim().length >= 2 || "Informe o nome impresso no cartão.",
+  cardExpiry: (value) =>
+    /^(0[1-9]|1[0-2])\/\d{2}$/.test(value.trim()) ||
+    "Informe a validade no formato MM/AA.",
+  cardCvv: (value) => {
+    const digits = normalizeDigits(value);
+    return (
+      (digits.length >= 3 && digits.length <= 4) ||
+      "Informe o CVV (3 ou 4 dígitos)."
+    );
+  },
+  installments: (value) => value !== "" || "Selecione o número de parcelas.",
+};
+
+/* Estado em memória (nada sensível é persistido) */
+const state = {
+  items: new Map(), // id (String) -> { product, qty } — sanitizado
+  delivery: "standard",
+  payment: "credit",
+};
+
+/* --------------------------------------------------------------------------
+   SVG ILUSTRATIVO (resumo) — mesmo padrão visual do catálogo / produto
+-------------------------------------------------------------------------- */
+
+function svg(attrs) {
+  const el = document.createElementNS(SVG_NS, "svg");
+  for (const key of Object.keys(attrs)) {
+    el.setAttribute(key, attrs[key]);
+  }
+  return el;
+}
+
+function checkoutImage(product) {
+  const palette = [
+    ["#0e7490", "#6d28d9"],
+    ["#155e75", "#0891b2"],
+    ["#6d28d9", "#f59e0b"],
+  ];
+  const colors = palette[product.id % palette.length];
+
+  const s = svg({
+    viewBox: "0 0 240 240",
+    role: "img",
+    "aria-label": `Imagem ilustrativa de ${product.name}`,
+  });
+
+  const caption = document.createElementNS(SVG_NS, "title");
+  caption.textContent = `Imagem ilustrativa de ${product.name}`;
+  s.appendChild(caption);
+
+  const bg = document.createElementNS(SVG_NS, "rect");
+  bg.setAttribute("width", "240");
+  bg.setAttribute("height", "240");
+  bg.setAttribute("fill", "url(#chk" + product.id + ")");
+  s.appendChild(bg);
+
+  const defs = document.createElementNS(SVG_NS, "defs");
+  const grad = document.createElementNS(SVG_NS, "linearGradient");
+  grad.id = "chk" + product.id;
+  grad.setAttribute("x1", "0");
+  grad.setAttribute("y1", "0");
+  grad.setAttribute("x2", "1");
+  grad.setAttribute("y2", "1");
+  const stopA = document.createElementNS(SVG_NS, "stop");
+  stopA.setAttribute("offset", "0%");
+  stopA.setAttribute("stop-color", colors[0]);
+  const stopB = document.createElementNS(SVG_NS, "stop");
+  stopB.setAttribute("offset", "100%");
+  stopB.setAttribute("stop-color", colors[1]);
+  grad.appendChild(stopA);
+  grad.appendChild(stopB);
+  defs.appendChild(grad);
+  s.appendChild(defs);
+
+  const letter = document.createElementNS(SVG_NS, "text");
+  letter.setAttribute("x", "50%");
+  letter.setAttribute("y", "55%");
+  letter.setAttribute("text-anchor", "middle");
+  letter.setAttribute("dominant-baseline", "middle");
+  letter.setAttribute("font-size", "88");
+  letter.setAttribute("font-weight", "900");
+  letter.setAttribute("font-family", "Rajdhani, sans-serif");
+  letter.setAttribute("fill", "rgba(255,255,255,0.95)");
+  letter.textContent = product.category.charAt(0).toUpperCase();
+  s.appendChild(letter);
+
+  return s;
+}
+
+/* --------------------------------------------------------------------------
+   HELPERS
+-------------------------------------------------------------------------- */
+
+function normalizeDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function deliveryMethod(id) {
+  return SHIPPING_METHODS.find((m) => m.id === id) || SHIPPING_METHODS[0];
+}
+
+function calcTotals() {
+  const subtotal = calculateSubtotal(state.items);
+  const shipping = deliveryMethod(state.delivery).price(subtotal);
+  return { subtotal, shipping, total: subtotal + shipping };
+}
+
+function announce(message) {
+  const status = document.getElementById("checkout-status");
+  if (status) status.textContent = message;
+}
+
+/* --------------------------------------------------------------------------
+   RENDER — RESUMO DO PEDIDO
+-------------------------------------------------------------------------- */
+
+function renderSummary() {
+  const list = document.getElementById("summary-items");
+  const subtotalValue = document.getElementById("summary-subtotal");
+  const freightValue = document.getElementById("summary-freight");
+  const totalValue = document.getElementById("summary-total");
+  const standardPrice = document.getElementById("delivery-standard-price");
+  const expressPrice = document.getElementById("delivery-express-price");
+  if (!list) return;
+
+  list.replaceChildren();
+  for (const { product, qty } of state.items.values()) {
+    const li = document.createElement("li");
+    li.className = "checkout-summary__item";
+
+    const media = document.createElement("span");
+    media.className = "checkout-summary__media";
+    const img = checkoutImage(product);
+    img.setAttribute("class", "checkout-summary__img");
+    media.appendChild(img);
+    li.appendChild(media);
+
+    const info = document.createElement("span");
+    info.className = "checkout-summary__item-info";
+    const name = document.createElement("span");
+    name.className = "checkout-summary__item-name";
+    name.textContent = product.name;
+    const meta = document.createElement("span");
+    meta.className = "checkout-summary__item-meta";
+    meta.textContent = `${qty} × ${formatBRL(product.priceCents)}`;
+    info.appendChild(name);
+    info.appendChild(meta);
+    li.appendChild(info);
+
+    const sub = document.createElement("span");
+    sub.className = "checkout-summary__item-sub";
+    sub.textContent = formatBRL(product.priceCents * qty);
+    li.appendChild(sub);
+
+    list.appendChild(li);
+  }
+
+  const { subtotal, shipping, total } = calcTotals();
+  subtotalValue.textContent = formatBRL(subtotal);
+
+  const method = deliveryMethod(state.delivery);
+  freightValue.textContent =
+    shipping === 0 ? `${method.label} — Grátis` : `${method.label} — ${formatBRL(shipping)}`;
+  freightValue.classList.toggle("is-free", shipping === 0);
+
+  totalValue.textContent = formatBRL(total);
+
+  // Preços exibidos nas opções de entrega
+  const standardCents = standardShippingCents(subtotal);
+  standardPrice.textContent = standardCents === 0 ? "Grátis" : formatBRL(standardCents);
+  expressPrice.textContent = formatBRL(EXPRESS_CENTS);
+
+  if (state.payment === "credit") {
+    renderInstallments(total);
+  }
+}
+
+function renderInstallments(totalCents) {
+  const select = document.getElementById("co-card-installments");
+  if (!select) return;
+
+  const previous = select.value;
+  select.replaceChildren();
+
+  for (let i = 1; i <= 12; i++) {
+    const option = document.createElement("option");
+    option.value = String(i);
+    option.textContent = `${i}x de ${formatBRL(Math.ceil(totalCents / i))} sem juros`;
+    select.appendChild(option);
+  }
+
+  select.value = "1";
+}
+
+/* --------------------------------------------------------------------------
+   RETORNO VISUAL DAS OPÇÕES SELECIONADAS
+-------------------------------------------------------------------------- */
+
+function refreshSelectionHighlights() {
+  document.querySelectorAll(".checkout-opt").forEach((opt) => {
+    const input = opt.querySelector("input[type='radio']");
+    opt.classList.toggle("is-selected", !!(input && input.checked));
+  });
+}
+
+function togglePaymentPanels() {
+  const credit = document.getElementById("co-credit-panel");
+  const pix = document.getElementById("co-pix-panel");
+  const boleto = document.getElementById("co-boleto-panel");
+  if (credit) credit.hidden = state.payment !== "credit";
+  if (pix) pix.hidden = state.payment !== "pix";
+  if (boleto) boleto.hidden = state.payment !== "boleto";
+}
+
+/* --------------------------------------------------------------------------
+   VALIDAÇÃO (frontend — sem alert(); mensagens associadas aos campos)
+-------------------------------------------------------------------------- */
+
+function setFieldError(field, message) {
+  const wrap = field.closest(".checkout-form__field");
+  if (!wrap) return;
+  const described = field.getAttribute("aria-describedby")
+    ? document.getElementById(field.getAttribute("aria-describedby"))
+    : null;
+
+  wrap.classList.toggle("has-error", Boolean(message));
+  if (message) {
+    field.setAttribute("aria-invalid", "true");
+    if (described) described.textContent = message;
+  } else {
+    field.removeAttribute("aria-invalid");
+    if (described) described.textContent = "";
+  }
+}
+
+function validateField(field) {
+  const rule = VALIDATORS[field.getAttribute("data-validate")];
+  if (!rule) return "";
+  const result = rule(field.value);
+  return result === true ? "" : result; // regra válida retorna true -> mensagem vazia
+}
+
+function handleSubmit(event) {
+  event.preventDefault();
+
+  const form = document.getElementById("checkout-form");
+  const fields = form.querySelectorAll("[data-validate]");
+  let firstError = null;
+
+  for (const field of fields) {
+    if (field.closest("[hidden]")) continue; // ignora painéis ocultos (PIX/boleto)
+    const message = validateField(field);
+    setFieldError(field, message);
+    if (message && !firstError) firstError = field;
+  }
+
+  if (firstError) {
+    firstError.focus();
+    announce("Revise os campos destacados antes de finalizar o pedido.");
+    return;
+  }
+
+  finishOrder();
+}
+
+/* --------------------------------------------------------------------------
+   FINALIZAÇÃO SIMULADA
+-------------------------------------------------------------------------- */
+
+function nextSequence() {
+  let sequence = 0;
+  try {
+    sequence = Number(window.localStorage.getItem(SEQUENCE_KEY) || 0) || 0;
+  } catch (err) {
+    // storage indisponível — segue com 0
+  }
+  sequence += 1;
+  try {
+    window.localStorage.setItem(SEQUENCE_KEY, String(sequence));
+  } catch (err) {
+    // storage indisponível — segue com o id em memória
+  }
+  return sequence;
+}
+
+function readConfirm() {
+  try {
+    const raw = sessionStorage.getItem(CONFIRM_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data && typeof data.id === "string" ? data : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function finishOrder() {
+  const totals = calcTotals();
+  const confirm = {
+    id: ORDER_PREFIX + String(nextSequence()).padStart(6, "0"),
+    createdAt: new Date().toISOString(),
+    totalCents: totals.total,
+    itemsCount: state.items.size,
+  };
+
+  try {
+    sessionStorage.setItem(CONFIRM_KEY, JSON.stringify(confirm));
+  } catch (err) {
+    // sessão indisponível — confirmação apenas em memória
+  }
+
+  clearCart(); // só limpa após validação bem-sucedida
+  syncHeaderCounts();
+  showSuccess(confirm);
+}
+
+function showSuccess(saved) {
+  toggleViews("success");
+  document.getElementById("success-order").textContent = saved.id;
+  const meta = document.getElementById("success-meta");
+  if (meta) {
+    const count = Number(saved.itemsCount || 0);
+    meta.textContent = `${count} ${count === 1 ? "item" : "itens"} no pedido — Total ${formatBRL(
+      saved.totalCents
+    )}. Simulação: nenhum pedido real foi criado.`;
+  }
+  document.getElementById("success-title").focus();
+  announce("Pedido realizado com sucesso.");
+}
+
+/* --------------------------------------------------------------------------
+   VIEWS (formulário / vazio / sucesso)
+-------------------------------------------------------------------------- */
+
+function toggleViews(mode) {
+  document.getElementById("checkout-layout").hidden = mode !== "form";
+  document.getElementById("checkout-empty").hidden = mode !== "empty";
+  document.getElementById("checkout-success").hidden = mode !== "success";
+}
+
+function bindEvents() {
+  const form = document.getElementById("checkout-form");
+
+  form.addEventListener("submit", handleSubmit);
+
+  // Limpa o estado de erro enquanto o usuário digita
+  form.addEventListener("input", (event) => {
+    const field = event.target.closest("[data-validate]");
+    if (field) setFieldError(field, "");
+  });
+
+  form.addEventListener("change", (event) => {
+    if (event.target.name === "co-delivery") {
+      state.delivery = event.target.value;
+      refreshSelectionHighlights();
+      renderSummary();
+    } else if (event.target.name === "co-payment") {
+      state.payment = event.target.value;
+      refreshSelectionHighlights();
+      togglePaymentPanels();
+      if (state.payment === "credit") renderSummary();
+    }
+  });
+}
+
+/* --------------------------------------------------------------------------
+   INIT — prioridade: itens no carrinho > confirmação da sessão > vazio
+-------------------------------------------------------------------------- */
+
+function init() {
+  const app = document.getElementById("checkout-app");
+  const form = document.getElementById("checkout-form");
+  if (!app || !form) return;
+
+  const loaded = sanitizeCart();
+  state.items = loaded.items;
+  syncHeaderCounts();
+
+  if (state.items.size > 0) {
+    const delivery = document.querySelector('input[name="co-delivery"]:checked');
+    const payment = document.querySelector('input[name="co-payment"]:checked');
+    state.delivery = (delivery && delivery.value) || "standard";
+    state.payment = (payment && payment.value) || "credit";
+
+    toggleViews("form");
+    bindEvents();
+    refreshSelectionHighlights();
+    togglePaymentPanels();
+    renderSummary();
+    return;
+  }
+
+  const saved = readConfirm();
+  if (saved) {
+    toggleViews("success");
+    showSuccess(saved);
+    return;
+  }
+
+  toggleViews("empty");
+}
+
+init();

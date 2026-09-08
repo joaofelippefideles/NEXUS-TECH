@@ -34,3 +34,6 @@
 
 /* 10. Página do carrinho e checkout */
 @import url("cart.css");
+
+/* 11. Checkout completo */
+@import url("checkout.css");
