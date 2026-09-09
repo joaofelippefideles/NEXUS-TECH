@@ -287,6 +287,12 @@
   gap: var(--space-3);
 }
 
+/* v2.5 — estado vazio oculto (ex.: #checkout-empty) respeita o atributo
+   `hidden`, que era sobreposto pela regra display:flex acima. */
+.cart-empty[hidden] {
+  display: none;
+}
+
 .cart-empty__icon {
   width: 64px;
   height: 64px;

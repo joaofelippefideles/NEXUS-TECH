@@ -217,6 +217,12 @@
   transform: scale(1.1);
 }
 
+/* v2.5 — estado ativo do favorito nos cards (home/catálogo). */
+.product-card__fav.is-faved {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
 .product-card__body {
   display: flex;
   flex-direction: column;
@@ -380,6 +386,11 @@
   background: var(--color-primary-soft);
 }
 
+/* v2.5 — atalhos do header viram links (mantém o mesmo visual) */
+a.icon-btn {
+  text-decoration: none;
+}
+
 .icon-btn .icon {
   width: 1.4em;
   height: 1.4em;
@@ -475,6 +486,12 @@
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   border: 1px solid transparent;
+}
+
+/* v2.5 — feedback vazio (ex.: <p class="alert" hidden>) não forma barra
+   visível: a regra display:flex acima sobrepunha o atributo hidden. */
+.alert[hidden] {
+  display: none;
 }
 
 .alert--success { background: var(--color-success-soft); color: var(--color-success); }

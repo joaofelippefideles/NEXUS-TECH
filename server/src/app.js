@@ -12,7 +12,7 @@ const helmet = require("helmet");
 
 const healthRouter = require("./routes/health.routes");
 const productsRouter = require("./routes/products.routes");
-const categoriesController = require("./controllers/products.controller");
+const productsController = require("./controllers/products.controller");
 const notFound = require("./middlewares/notFound");
 const errorHandler = require("./middlewares/errorHandler");
 
@@ -42,8 +42,8 @@ app.use(express.json());
 /* --- Rotas --- */
 app.use("/api/health", healthRouter);
 app.use("/api/products", productsRouter);
-app.get("/api/categories", categoriesController.categories);
-app.get("/api/brands", categoriesController.brands);
+app.get("/api/categories", productsController.categories);
+app.get("/api/brands", productsController.brands);
 
 app.get("/", (req, res) => {
   res.json({ name: "Nexus Tech API", health: "/api/health" });

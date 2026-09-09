@@ -28,6 +28,16 @@ function CatalogController(container) {
   const state = defaultState();
   const facets = buildFacets(products);
 
+  // v2.5 — busca do header chega aqui via ?q=<termo> (mesmo fluxo dos filtros).
+  const queryParam = (new URLSearchParams(window.location.search).get("q") || "").trim();
+  if (queryParam) {
+    state.query = queryParam;
+    const headerSearch = document.getElementById("search-header");
+    if (headerSearch) {
+      headerSearch.value = state.query;
+    }
+  }
+
   const gridEl = container.querySelector("#product-grid");
   const countEl = container.querySelector("#product-count");
   const filtersRoot = container.querySelector("#catalog-filters");

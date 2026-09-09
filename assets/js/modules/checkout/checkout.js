@@ -222,7 +222,10 @@ function renderSummary() {
   const totalValue = document.getElementById("summary-total");
   const standardPrice = document.getElementById("delivery-standard-price");
   const expressPrice = document.getElementById("delivery-express-price");
-  if (!list) return;
+
+  // v2.5 — guarda única para todos os elementos usados a seguir; o guard
+  // anterior (só `list`) podia prosseguir com campos nulos.
+  if (!list || !subtotalValue || !freightValue || !totalValue) return;
 
   list.replaceChildren();
   for (const { product, qty } of state.items.values()) {
@@ -280,7 +283,9 @@ function renderInstallments(totalCents) {
   const select = document.getElementById("co-card-installments");
   if (!select) return;
 
-  const previous = select.value;
+  // v2.5 — preserva a parcela escolhida ao re-renderizar (troca de frete/
+  // método de pagamento); antes o select era sempre resetado para 1x.
+  const previous = Number(select.value) || 1;
   select.replaceChildren();
 
   for (let i = 1; i <= 12; i++) {
@@ -290,7 +295,7 @@ function renderInstallments(totalCents) {
     select.appendChild(option);
   }
 
-  select.value = "1";
+  select.value = String(previous >= 1 && previous <= 12 ? previous : 1);
 }
 
 /* --------------------------------------------------------------------------

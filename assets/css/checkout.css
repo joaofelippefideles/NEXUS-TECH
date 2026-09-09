@@ -29,6 +29,16 @@
   }
 }
 
+/* v2.5 — restaura o atributo `hidden` dos estados do checkout: as regras de
+   display (grid/flex) acima sobrepõem o [hidden] do browser; estas declarações
+   de especificidade maior garantem que apenas um estado/painel aparece por vez. */
+.checkout-layout[hidden],
+.checkout-payment__panel[hidden],
+.checkout-payment__note[hidden],
+.checkout-success[hidden] {
+  display: none;
+}
+
 .checkout-summary {
   grid-row: auto;
 }
