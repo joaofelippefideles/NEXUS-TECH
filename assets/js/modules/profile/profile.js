@@ -13,6 +13,16 @@
    - sem sessão, o painel mantém o modo legado v1.9 (perfil local "nexus:profile",
      endereços/favoritos/preferências globais) e exibe o convite para entrar.
 
+   v2.4 — Pedidos do usuário:
+   - a seção "Meus pedidos" exibe o histórico real vindo de "nexus:orders"
+     (criado pelo checkout), filtrado pelo userId da sessão validada;
+   - apenas leitura: nenhum pedido é criado/alterado/duplicado aqui; pedidos
+     de outros usuários permanecem intactos no storage;
+   - sem sessão válida, nenhum pedido é exibido (convite para entrar);
+   - detalhes do pedido com aria-expanded/aria-controls, sem innerHTML e sem
+     dados sensíveis (método de entrega/pagamento apenas).
+   - cards de visão geral e pedidos refletem a quantidade real do usuário.
+
    NENHUMA senha é persistida ou exibida. Nenhuma requisição ao servidor
    (o projeto é 100% frontend simulado, sem backend).
    ========================================================================== */
@@ -26,6 +36,11 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const PROFILE_KEY = "nexus:profile";
 const ADDRESSES_KEY = "nexus:addresses";
 const PREFS_KEY = "nexus:prefs";
+const ORDERS_KEY = "nexus:orders";
+
+const STATUS_LABELS = {
+  processing: "Em processamento",
+};
 
 const SECTIONS = [
   { id: "overview", hash: "visao-geral", label: "Visão geral" },
@@ -239,6 +254,7 @@ function renderSection(section) {
   const renderers = {
     overview: renderOverview,
     dados: renderDados,
+    pedidos: renderPedidos,
     enderecos: renderAddresses,
     favoritos: renderFavorites,
     config: renderConfig,
@@ -266,18 +282,35 @@ function handleHashChange() {
 -------------------------------------------------------------------------- */
 
 function renderOverview() {
-  const pedidos = document.getElementById("ov-pedidos");
-  if (pedidos) pedidos.textContent = "0";
-
   const favorites = getFavorites();
   const addresses = addressesForCurrentUser();
   const profile = getDisplayProfile();
+  const orders = ordersForCurrentUser();
 
   const fav = document.getElementById("ov-favoritos");
   if (fav) fav.textContent = String(favorites.length);
 
   const end = document.getElementById("ov-enderecos");
   if (end) end.textContent = String(addresses.length);
+
+  const pedidos = document.getElementById("ov-pedidos");
+  if (pedidos) {
+    // Só sessão válida conta pedidos; sem sessão, zero (nada de usuário da
+    // URL/DOM). Nenhum pedido estrangeiro é contabilizado.
+    pedidos.textContent = String(currentUserId() ? orders.length : 0);
+  }
+  const pedidosText = document.getElementById("ov-pedidos-text");
+  if (pedidosText) {
+    if (!currentUserId()) {
+      pedidosText.textContent = "Entre na sua conta para ver seus pedidos.";
+    } else if (orders.length === 1) {
+      pedidosText.textContent = "1 pedido registrado.";
+    } else if (orders.length > 1) {
+      pedidosText.textContent = `${orders.length} pedidos registrados.`;
+    } else {
+      pedidosText.textContent = "Nenhum pedido registrado ainda.";
+    }
+  }
 
   const conta = document.getElementById("ov-conta");
   const contaText = document.getElementById("ov-conta-text");
@@ -738,6 +771,284 @@ function handleFavoriteClick(event) {
 }
 
 /* --------------------------------------------------------------------------
+   PEDIDOS — histórico do usuário autenticado
+   Fonte: "nexus:orders" (array criado pelo checkout — snapshot v2.3).
+   Apenas LEITURA: nenhum pedido é criado/editado/removido aqui; pedidos de
+   outros usuários permanecem intactos no storage. O filtro usa EXCLUSIVAMENTE
+   o userId da sessão validada (getAuthUser) — nunca HTML, input, query, URL
+   ou DOM. Dados exibidos são não sensíveis (sem cartão/CVV/senha).
+   Sem innerHTML: tudo é criado com createElement/textContent/setAttribute.
+-------------------------------------------------------------------------- */
+
+function readOrders() {
+  const data = read(ORDERS_KEY);
+  return Array.isArray(data) ? data : [];
+}
+
+/* Lista do usuário autenticado. Sem sessão válida → [] (nenhum pedido é
+   exibido). Com sessão, apenas os pedidos cujo userId bate com o da sessão. */
+function ordersForCurrentUser() {
+  const userId = currentUserId();
+  if (!userId) return [];
+  return readOrders().filter(
+    (order) => order && String(order.userId) === String(userId),
+  );
+}
+
+/* createdAt inválido/ausente → tratado como o mais antigo (vai para o fim da
+   lista, que é ordenada da mais recente para a mais antiga) e exibido como
+   "Data indisponível". Documentado: pedido nunca quebra por causa disso. */
+function orderTimestamp(order) {
+  const time = Date.parse(String((order && order.createdAt) || ""));
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function orderDateText(order) {
+  const time = orderTimestamp(order);
+  if (time <= 0) return "Data indisponível";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(time));
+}
+
+function orderStatusText(order) {
+  const raw = order && order.status;
+  return STATUS_LABELS[raw] || String(raw || "Status indisponível");
+}
+
+function orderItemCount(order) {
+  if (typeof order.itemCount === "number") return order.itemCount;
+  if (Array.isArray(order.items)) {
+    return order.items.reduce(
+      (sum, item) => sum + (Number(item && item.quantity) || 0),
+      0,
+    );
+  }
+  return 0;
+}
+
+function orderTotalCents(order) {
+  if (typeof order.totalCents === "number") return order.totalCents;
+  if (Array.isArray(order.items)) {
+    return order.items.reduce(
+      (sum, item) => sum + (Number(item && item.totalCents) || 0),
+      0,
+    );
+  }
+  return null;
+}
+
+function moneyText(cents) {
+  return typeof cents === "number" ? formatBRL(cents) : "—";
+}
+
+function deliveryText(order) {
+  const delivery = order && order.delivery;
+  if (delivery && delivery.label) return delivery.label;
+  if (delivery && delivery.method) return delivery.method;
+  return "Informação indisponível";
+}
+
+function paymentText(order) {
+  const payment = order && order.payment;
+  if (payment && payment.label) return payment.label;
+  if (payment && payment.method) return payment.method;
+  return "Informação indisponível";
+}
+
+/* ID seguro para usar em id/atributos do DOM (normaliza o id do pedido e
+   prefixa "pedido-" para evitar colisões e ids inválidos). */
+function orderDomId(orderId) {
+  const safe = String(orderId || "").replace(/[^A-Za-z0-9_-]/g, "");
+  return safe ? "pedido-" + safe : "pedido-generico";
+}
+
+function renderPedidos() {
+  const list = document.getElementById("pedidos-list");
+  const empty = document.getElementById("pedidos-empty");
+  const authRequired = document.getElementById("pedidos-auth-required");
+  if (!list || !empty || !authRequired) return;
+
+  const userId = currentUserId();
+
+  // Sem sessão válida: nenhum pedido é exibido; pede login.
+  if (!userId) {
+    authRequired.hidden = false;
+    empty.hidden = true;
+    list.hidden = true;
+    list.replaceChildren();
+    return;
+  }
+
+  const orders = ordersForCurrentUser().sort(
+    (a, b) => orderTimestamp(b) - orderTimestamp(a),
+  );
+
+  authRequired.hidden = true;
+  const emptyVisible = orders.length === 0;
+  empty.hidden = !emptyVisible;
+  list.hidden = emptyVisible;
+  list.replaceChildren();
+
+  for (const order of orders) list.appendChild(renderOrderCard(order));
+}
+
+function renderOrderCard(order) {
+  const li = document.createElement("li");
+  li.className = "pedido";
+
+  const head = document.createElement("div");
+  head.className = "pedido__head";
+
+  const title = document.createElement("h3");
+  title.className = "pedido__number";
+  title.textContent = `Pedido ${order.id}`;
+
+  const status = document.createElement("span");
+  status.className = "pedido__status";
+  status.textContent = orderStatusText(order);
+
+  head.appendChild(title);
+  head.appendChild(status);
+
+  const count = orderItemCount(order);
+  const meta = document.createElement("p");
+  meta.className = "pedido__meta";
+  meta.textContent =
+    `${orderDateText(order)} · ${count} ${count === 1 ? "item" : "itens"}` +
+    ` · ${moneyText(orderTotalCents(order))} · ${deliveryText(order)}`;
+
+  const domId = orderDomId(order.id);
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "btn btn--outline pedido__toggle";
+  toggle.id = domId + "-btn";
+  toggle.textContent = "Ver detalhes";
+  toggle.setAttribute("aria-label", `Ver detalhes do pedido ${order.id}`);
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.setAttribute("aria-controls", domId + "-details");
+  toggle.setAttribute("data-order-toggle", String(order.id));
+
+  const details = document.createElement("div");
+  details.className = "pedido-details";
+  details.id = domId + "-details";
+  details.hidden = true;
+  details.setAttribute("role", "region");
+  details.setAttribute("aria-labelledby", domId + "-btn");
+  appendOrderDetails(details, order);
+
+  li.appendChild(head);
+  li.appendChild(meta);
+  li.appendChild(toggle);
+  li.appendChild(details);
+  return li;
+}
+
+function appendOrderDetails(details, order) {
+  const itemsTitle = document.createElement("h4");
+  itemsTitle.textContent = "Itens do pedido";
+  details.appendChild(itemsTitle);
+
+  const items = document.createElement("ul");
+  items.className = "pedido-items";
+  for (const item of Array.isArray(order.items) ? order.items : []) {
+    if (!item) continue;
+    const row = document.createElement("li");
+    row.className = "pedido-item";
+
+    const main = document.createElement("div");
+    main.className = "pedido-item__main";
+    const name = document.createElement("strong");
+    name.textContent = item.name || "Produto";
+    const unit = document.createElement("span");
+    unit.className = "pedido-item__meta";
+    unit.textContent =
+      `${Number(item.quantity) || 0} × ${moneyText(item.unitPriceCents)}`;
+    main.appendChild(name);
+    main.appendChild(unit);
+
+    const total = document.createElement("span");
+    total.className = "pedido-item__total";
+    total.textContent = moneyText(item.totalCents);
+
+    row.appendChild(main);
+    row.appendChild(total);
+    items.appendChild(row);
+  }
+  details.appendChild(items);
+
+  const cols = document.createElement("div");
+  cols.className = "pedido-details__cols";
+
+  const summaryTitle = document.createElement("h4");
+  summaryTitle.textContent = "Resumo";
+  cols.appendChild(summaryTitle);
+  cols.appendChild(
+    buildSummary([
+      { label: "Subtotal", value: moneyText(order.subtotalCents) },
+      { label: "Frete", value: moneyText(order.shippingCents) },
+      { label: "Total", value: moneyText(orderTotalCents(order)), total: true },
+    ]),
+  );
+
+  const infoTitle = document.createElement("h4");
+  infoTitle.textContent = "Entrega e pagamento";
+  cols.appendChild(infoTitle);
+  cols.appendChild(
+    buildSummary([
+      { label: "Entrega", value: deliveryText(order) },
+      { label: "Pagamento", value: paymentText(order) },
+    ]),
+  );
+
+  details.appendChild(cols);
+}
+
+function buildSummary(rows) {
+  const list = document.createElement("dl");
+  list.className = "pedido-summary";
+  for (const row of rows) {
+    const item = document.createElement("div");
+    if (row.total) item.className = "pedido-summary__total";
+    const dt = document.createElement("dt");
+    dt.textContent = row.label;
+    const dd = document.createElement("dd");
+    dd.textContent = row.value;
+    item.appendChild(dt);
+    item.appendChild(dd);
+    list.appendChild(item);
+  }
+  return list;
+}
+
+/* SEGURANÇA: o pedido só abre se pertencer ao usuário da sessão. A busca é
+   feita SEMPRE na lista filtrada (id + userId), nunca no storage global e
+   nunca com userId vindo do cliente — id forjado simplesmente não encontra
+   nada. Este é o único ponto de acesso aos detalhes. */
+function handlePedidosClick(event) {
+  const toggle = event.target.closest("[data-order-toggle]");
+  if (!toggle) return;
+
+  const id = String(toggle.getAttribute("data-order-toggle"));
+  const order = ordersForCurrentUser().find((o) => String(o.id) === id);
+  if (!order) return;
+
+  const details = document.getElementById(orderDomId(order.id) + "-details");
+  if (!details) return;
+
+  const willOpen = details.hidden;
+  details.hidden = !willOpen;
+  toggle.setAttribute("aria-expanded", String(willOpen));
+  announce(
+    willOpen
+      ? `Detalhes do pedido ${order.id} abertos.`
+      : `Detalhes do pedido ${order.id} fechados.`,
+  );
+}
+
+/* --------------------------------------------------------------------------
    CONFIGURAÇÕES — preferências
 -------------------------------------------------------------------------- */
 
@@ -810,6 +1121,9 @@ function bindEvents() {
 
   const favoritesList = document.getElementById("favorites-list");
   if (favoritesList) favoritesList.addEventListener("click", handleFavoriteClick);
+
+  const pedidosList = document.getElementById("pedidos-list");
+  if (pedidosList) pedidosList.addEventListener("click", handlePedidosClick);
 
   const prefsForm = document.getElementById("prefs-form");
   if (prefsForm) prefsForm.addEventListener("change", handlePrefChange);
