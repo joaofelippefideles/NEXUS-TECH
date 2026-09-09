@@ -2,13 +2,25 @@
    NEXUS TECH — Perfil / Minha conta
    Navegação entre seções (hash-based), dados pessoais, endereços, favoritos
    e preferências. Persistência em localStorage (chaves com prefixo "nexus:").
-   Sem autenticação e sem requisições ao servidor: tudo é simulado aqui.
+
+   v2.2 — Minha Conta real do usuário:
+   - quando há sessão válida (sessionStorage "nexus:auth" apontando para um
+     usuário existente em "nexus:user"), os dados pessoais exibidos/gravados
+     são os do usuário autenticado (nexus:user);
+   - endereços passam a carregar um campo "userId"; endereços criados/editados
+     com sessão são associados ao usuário da sessão (nunca pelo HTML);
+   - preferências são tagueadas com "userId" quando há sessão;
+   - sem sessão, o painel mantém o modo legado v1.9 (perfil local "nexus:profile",
+     endereços/favoritos/preferências globais) e exibe o convite para entrar.
+
+   NENHUMA senha é persistida ou exibida. Nenhuma requisição ao servidor
+   (o projeto é 100% frontend simulado, sem backend).
    ========================================================================== */
 
 import { products } from "../../data/products.js";
 import { formatBRL } from "../../utils/format.js";
 import { getFavorites, toggleFavorite, syncHeaderCounts } from "../store/store.js";
-import { getAuthUser, updateStoredUser } from "../auth/auth.js";
+import { getAuthUser, getSession, updateStoredUser } from "../auth/auth.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const PROFILE_KEY = "nexus:profile";
@@ -72,8 +84,21 @@ function getProfile() {
   return data && typeof data === "object" ? data : {};
 }
 
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+/* Sessão válida: aponta para um usuário que existe de fato em "nexus:user"
+   (getAuthUser já valida a correspondência entre sessão e usuário). Retorna
+   o userId da sessão ou null quando não há sessão válida. */
+function currentUserId() {
+  const session = getSession();
+  if (!session || !String(session.userId)) return null;
+  return getAuthUser() ? String(session.userId) : null;
+}
+
 /* Dados exibidos: vêm do usuário da sessão quando autenticado; caso
-   contrário, mantém o perfil local (v1.9). */
+   contrário, mantém o perfil local (v1.9) — NUNCA os dados do usuário. */
 function getDisplayProfile() {
   const user = getAuthUser();
   if (user) {
@@ -81,13 +106,19 @@ function getDisplayProfile() {
       name: user.name || "",
       email: user.email || "",
       phone: user.phone || "",
+      cpf: user.cpf || "",
+      createdAt: user.createdAt || "",
     };
   }
   return getProfile();
 }
 
 function saveProfile(data) {
-  return write(PROFILE_KEY, { name: data.name || "", email: data.email || "", phone: data.phone || "" });
+  return write(PROFILE_KEY, {
+    name: data.name || "",
+    email: normalizeEmail(data.email),
+    phone: data.phone || "",
+  });
 }
 
 function getAddresses() {
@@ -99,6 +130,23 @@ function saveAddresses(list) {
   return write(ADDRESSES_KEY, list);
 }
 
+/* Endereços do usuário autenticado. Sem sessão retorna todos (modo v1.9).
+   Com sessão, retorna apenas os do usuário + endereços legados (sem userId),
+   que pertencem ao único usuário do mock — preservando dados existentes. */
+function addressesForCurrentUser() {
+  const userId = currentUserId();
+  if (!userId) return getAddresses();
+  return getAddresses().filter((a) => !a.userId || String(a.userId) === String(userId));
+}
+
+/* Um endereço está no escopo do usuário autenticado quando não tem dono
+   declarado (legado) ou pertence à sessão. Fora do escopo: nunca alterar. */
+function isOwnAddress(address) {
+  const userId = currentUserId();
+  if (!userId) return true;
+  return !address.userId || String(address.userId) === String(userId);
+}
+
 function getPrefs() {
   const data = read(PREFS_KEY);
   return data && typeof data === "object"
@@ -106,12 +154,17 @@ function getPrefs() {
     : { news: false, offers: false, contact: false };
 }
 
+/* Preferências: tagueadas com "userId" quando há sessão (associação ao
+   usuário); sem sessão, apenas os três pares (formato v1.9 preservado). */
 function savePrefs(prefs) {
-  return write(PREFS_KEY, {
+  const userId = currentUserId();
+  const next = {
     news: Boolean(prefs.news),
     offers: Boolean(prefs.offers),
     contact: Boolean(prefs.contact),
-  });
+  };
+  if (userId) next.userId = userId;
+  return write(PREFS_KEY, next);
 }
 
 function normalizeDigits(value) {
@@ -217,7 +270,7 @@ function renderOverview() {
   if (pedidos) pedidos.textContent = "0";
 
   const favorites = getFavorites();
-  const addresses = getAddresses();
+  const addresses = addressesForCurrentUser();
   const profile = getDisplayProfile();
 
   const fav = document.getElementById("ov-favoritos");
@@ -334,17 +387,20 @@ function handleProfileSubmit(event) {
     return;
   }
 
-  saveProfile({
+  const data = {
     name: document.getElementById("pf-name").value.trim(),
-    email: document.getElementById("pf-email").value.trim(),
+    email: normalizeEmail(document.getElementById("pf-email").value),
     phone: document.getElementById("pf-phone").value.trim(),
-  });
+  };
+
   if (getAuthUser()) {
-    updateStoredUser({
-      name: document.getElementById("pf-name").value.trim(),
-      email: document.getElementById("pf-email").value.trim(),
-      phone: document.getElementById("pf-phone").value.trim(),
-    });
+    // Autenticado: atualiza SOMENTE o usuário da sessão (preserva id e
+    // createdAt no updateStoredUser) — não cria um novo usuário nem grava
+    // um perfil separado.
+    updateStoredUser(data);
+  } else {
+    // Sem sessão: modo legado v1.9 (perfil local), que não é o usuário.
+    saveProfile(data);
   }
   showFeedback("profile-feedback", "Dados salvos com sucesso!");
 }
@@ -355,7 +411,7 @@ function handleProfileSubmit(event) {
 
 function buildAddressFromForm() {
   const val = (id) => document.getElementById(id).value.trim();
-  return {
+  const address = {
     id: state.editingAddressId || "addr-" + Date.now().toString(36),
     label: val("addr-label"),
     cep: val("addr-cep"),
@@ -366,6 +422,11 @@ function buildAddressFromForm() {
     city: val("addr-city"),
     state: val("addr-state"),
   };
+  // Com sessão válida, o endereço é associado ao usuário da sessão
+  // (NUNCA confia em userId vindo de campos HTML).
+  const userId = currentUserId();
+  if (userId) address.userId = userId;
+  return address;
 }
 
 function addressSummary(address) {
@@ -375,7 +436,7 @@ function addressSummary(address) {
 }
 
 function renderAddresses() {
-  const addresses = getAddresses();
+  const addresses = addressesForCurrentUser();
   const list = document.getElementById("addresses-list");
   const empty = document.getElementById("addresses-empty");
   if (!list || !empty) return;
@@ -437,7 +498,7 @@ function showAddressForm(editingId = null) {
   const title = document.getElementById("address-form-title");
   if (!form || !title) return;
 
-  const editing = getAddresses().find((a) => String(a.id) === state.editingAddressId);
+  const editing = getAddresses().find((a) => String(a.id) === state.editingAddressId && isOwnAddress(a));
   const setVal = (id, value) => {
     const el = document.getElementById(id);
     if (el) el.value = value || "";
@@ -494,10 +555,15 @@ function handleAddressSubmit(event) {
 
   const address = buildAddressFromForm();
   const addresses = getAddresses();
-  const index = addresses.findIndex((a) => String(a.id) === String(address.id));
+  const index = addresses.findIndex(
+    (a) => String(a.id) === String(address.id) && isOwnAddress(a),
+  );
   const isEditing = index >= 0;
 
   if (isEditing) {
+    // Preserva o dono (userId) original ao editar; nunca troca o usuário da
+    // sessão por um campo do formulário.
+    if (addresses[index].userId) address.userId = addresses[index].userId;
     addresses[index] = address;
   } else {
     addresses.push(address);
@@ -522,7 +588,9 @@ function handleAddressListClick(event) {
   }
 
   if (action === "remove") {
-    const addresses = getAddresses().filter((a) => String(a.id) !== String(id));
+    const addresses = getAddresses().filter(
+      (a) => !(String(a.id) === String(id) && isOwnAddress(a)),
+    );
     saveAddresses(addresses);
     if (state.editingAddressId === String(id)) hideAddressForm();
     renderAddresses();
