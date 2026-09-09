@@ -500,6 +500,19 @@
                 </p>
               </div>
 
+              <!-- Autenticação obrigatória (v2.3): sem sessão válida a compra
+                   não é finalizada; o carrinho é preservado. -->
+              <div class="alert alert--warning checkout-auth" id="checkout-auth-required" role="status" hidden>
+                <strong>Para finalizar o pedido, entre na sua conta.</strong>
+                <p>
+                  Seu carrinho foi preservado. Após entrar, você poderá voltar e concluir a compra.
+                </p>
+                <div class="checkout-auth__actions">
+                  <a class="btn btn--primary" href="login.html?next=checkout.html">Entrar na minha conta</a>
+                  <a class="btn btn--ghost" href="carrinho.html">Voltar ao carrinho</a>
+                </div>
+              </div>
+
             </form>
 
             <!-- Resumo do pedido -->
@@ -548,6 +561,7 @@
             <p class="checkout-success__meta" id="success-meta"></p>
             <div class="checkout-success__actions">
               <a href="produtos.html" class="btn btn--primary">Continuar comprando</a>
+              <a href="perfil.html" class="btn btn--outline">Ver minha conta</a>
               <a href="carrinho.html" class="btn btn--outline">Voltar ao carrinho</a>
             </div>
           </div>

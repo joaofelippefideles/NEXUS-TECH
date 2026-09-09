@@ -105,6 +105,19 @@ function showFeedback(message, type) {
    SUBMIT
 -------------------------------------------------------------------------- */
 
+/* Página de retorno após o login (parâmetro "?next=checkout.html", usado no
+   fluxo de compra v2.3). Aceita somente um nome de página simples (ex.: um
+   "checkout.html") — sem esquema, caminho ou query arbitrários; caso
+   contrário retorna null e o login segue para perfil.html. */
+function nextPage() {
+  try {
+    const next = new URL(window.location.href).searchParams.get("next") || "";
+    return /^[A-Za-z0-9_\-]+\.html$/.test(next) ? next : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 function handleSubmit(event) {
   event.preventDefault();
 
@@ -134,8 +147,9 @@ function handleSubmit(event) {
   showFeedback(`Bem-vindo(a)${firstName ? ", " + firstName : ""}! Entrando na sua conta...`, "success");
   announce("Login realizado com sucesso!");
 
+  const target = authBasePath() + (nextPage() || "perfil.html");
   window.setTimeout(() => {
-    window.location.href = authBasePath() + "perfil.html";
+    window.location.href = target;
   }, 600);
 }
 
@@ -160,9 +174,9 @@ function bindEvents() {
 }
 
 function init() {
-  // Já autenticado? Vai direto para Minha conta (sem recarregar).
+  // Já autenticado? Vai direto para o destino (ou Minha conta), sem recarregar.
   if (getAuthUser()) {
-    window.location.replace(authBasePath() + "perfil.html");
+    window.location.replace(authBasePath() + (nextPage() || "perfil.html"));
     return;
   }
   hideFeedback();

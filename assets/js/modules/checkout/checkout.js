@@ -13,9 +13,23 @@
    - confirmação simula um pedido (identificador fictício), limpa o carrinho
      e evita duplicação ao recarregar (confirmação guardada apenas na sessão);
    - DOM construído com createElement/textContent (sem innerHTML / XSS).
+
+   v2.3 — Compra simulada vinculada ao usuário:
+   - a finalização EXIGE sessão válida (sessionStorage "nexus:auth" apontando
+     para um usuário existente em "nexus:user" — getAuthUser). Sem sessão: NÃO
+     cria pedido, NÃO avança a sequência, NÃO limpa o carrinho; mostra mensagem
+     acessível e ação para entrar (login.html?next=checkout.html);
+   - o pedido mock é persistido em localStorage "nexus:orders" (array) com
+     userId DERIVADO SOMENTE da sessão (nunca de inputs/URL/DOM) e uma
+     fotografia dos itens (productId, nome, quantidade e preços) para que
+     alterações futuras do catálogo não alterem o histórico;
+   - pagamento guardado apenas como { method } (sem cartão/CVV/credenciais);
+   - o botão de finalização é travado durante o processamento e a confirmação
+     da sessão impede duplicação por duplo clique, Enter repetido ou reload.
    ========================================================================== */
 
 import { formatBRL } from "../../utils/format.js";
+import { getAuthUser } from "../auth/auth.js";
 import { clearCart, syncHeaderCounts } from "../store/store.js";
 import {
   calculateSubtotal,
@@ -27,7 +41,19 @@ import {
 const SVG_NS = "http://www.w3.org/2000/svg";
 const SEQUENCE_KEY = "nexus:checkout:seq"; // contador simples e não sensível
 const CONFIRM_KEY = "nexus:checkout:last-order"; // confirmação da sessão
+const ORDERS_KEY = "nexus:orders"; // pedidos mock persistidos (array de pedidos)
 const ORDER_PREFIX = "NT-";
+
+const DELIVERY_LABELS = {
+  standard: "Entrega padrão",
+  express: "Entrega expressa",
+};
+
+const PAYMENT_LABELS = {
+  credit: "Cartão de crédito",
+  pix: "PIX",
+  boleto: "Boleto bancário",
+};
 
 /* Opções de entrega simuladas. A padrão reutiliza a regra de frete do
    carrinho (consistência obrigatória); a expressa é um upgrade opcional. */
@@ -90,6 +116,7 @@ const state = {
   items: new Map(), // id (String) -> { product, qty } — sanitizado
   delivery: "standard",
   payment: "credit",
+  locked: false, // proteção contra duplicação de pedido
 };
 
 /* --------------------------------------------------------------------------
@@ -357,6 +384,36 @@ function nextSequence() {
   return sequence;
 }
 
+/* Leitura/escrita segura (localStorage/sessionStorage). */
+function readJSON(key, store) {
+  try {
+    const raw = store.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function writeJSON(key, value, store) {
+  try {
+    store.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/* Banco de pedidos mock: array persistido em "nexus:orders". Cada pedido
+   carrega seu userId; a v2.4 filtrará por usuário para o histórico. */
+function readOrders() {
+  const list = readJSON(ORDERS_KEY, window.localStorage);
+  return Array.isArray(list) ? list : [];
+}
+
+function saveOrders(list) {
+  return writeJSON(ORDERS_KEY, list, window.localStorage);
+}
+
 function readConfirm() {
   try {
     const raw = sessionStorage.getItem(CONFIRM_KEY);
@@ -368,13 +425,96 @@ function readConfirm() {
   }
 }
 
-function finishOrder() {
+/* Fotografia da compra no momento da finalização. userId vem EXCLUSIVAMENTE
+   da sessão validada (getAuthUser) — nunca de inputs, URL ou DOM. */
+function buildOrder(user) {
   const totals = calcTotals();
-  const confirm = {
+  const items = [];
+  for (const { product, qty } of state.items.values()) {
+    items.push({
+      productId: product.id,
+      name: product.name,
+      quantity: qty,
+      unitPriceCents: product.priceCents,
+      totalCents: product.priceCents * qty,
+    });
+  }
+
+  const nameField = document.getElementById("co-name");
+  const emailField = document.getElementById("co-email");
+
+  return {
     id: ORDER_PREFIX + String(nextSequence()).padStart(6, "0"),
+    userId: String(user.id),
     createdAt: new Date().toISOString(),
+    status: "processing",
+    items,
+    subtotalCents: totals.subtotal,
+    shippingCents: totals.shipping,
     totalCents: totals.total,
-    itemsCount: state.items.size,
+    itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+    delivery: {
+      method: state.delivery,
+      label: DELIVERY_LABELS[state.delivery] || state.delivery,
+    },
+    // Apenas o método — nenhum dado de cartão/CVV/credencial é persistido.
+    payment: {
+      method: state.payment,
+      label: PAYMENT_LABELS[state.payment] || state.payment,
+    },
+    // Fotografia não sensível do comprador (dados validados do formulário);
+    // o vínculo principal continua sendo o userId da sessão.
+    customer: {
+      name: (nameField && nameField.value || "").trim(),
+      email: (emailField && emailField.value || "").trim().toLowerCase(),
+    },
+  };
+}
+
+/* Sem sessão válida: NÃO cria pedido, NÃO avança a sequência e NÃO limpa o
+   carrinho. Mensagem acessível () e ação para entrar em login.html. */
+function showAuthRequired() {
+  const block = document.getElementById("checkout-auth-required");
+  if (block) block.hidden = false;
+  announce(
+    "Para finalizar o pedido, entre na sua conta. Seu carrinho foi preservado.",
+  );
+  const link = block ? block.querySelector("a") : null;
+  if (link) link.focus({ preventScroll: true });
+}
+
+function finishOrder() {
+  if (state.locked) return; // duplo clique / Enter repetido / handler repetido
+
+  const user = getAuthUser();
+  if (!user) {
+    showAuthRequired();
+    return;
+  }
+
+  // Trava ANTES de criar o pedido: qualquer novo submit é ignorado.
+  state.locked = true;
+  const submitBtn = document.getElementById("co-submit");
+  if (submitBtn) submitBtn.disabled = true;
+
+  const order = buildOrder(user);
+
+  const orders = readOrders();
+  orders.push(order);
+  if (!saveOrders(orders)) {
+    state.locked = false;
+    if (submitBtn) submitBtn.disabled = false;
+    announce("Não foi possível registrar o pedido. Tente novamente.");
+    return;
+  }
+
+  const confirm = {
+    id: order.id,
+    createdAt: order.createdAt,
+    totalCents: order.totalCents,
+    itemCount: order.itemCount,
+    delivery: order.delivery,
+    payment: order.payment,
   };
 
   try {
@@ -383,7 +523,7 @@ function finishOrder() {
     // sessão indisponível — confirmação apenas em memória
   }
 
-  clearCart(); // só limpa após validação bem-sucedida
+  clearCart(); // só limpa após o pedido ser registrado com sucesso
   syncHeaderCounts();
   showSuccess(confirm);
 }
@@ -393,13 +533,24 @@ function showSuccess(saved) {
   document.getElementById("success-order").textContent = saved.id;
   const meta = document.getElementById("success-meta");
   if (meta) {
-    const count = Number(saved.itemsCount || 0);
-    meta.textContent = `${count} ${count === 1 ? "item" : "itens"} no pedido — Total ${formatBRL(
-      saved.totalCents
-    )}. Simulação: nenhum pedido real foi criado.`;
+    const count = Number(saved.itemCount || 0);
+    let text = `${count} ${count === 1 ? "item" : "itens"} no pedido — Total ${formatBRL(
+      saved.totalCents,
+    )}`;
+    if (saved.payment && saved.payment.label) text += ` · ${saved.payment.label}`;
+    if (saved.delivery && saved.delivery.label) text += ` · ${saved.delivery.label}`;
+    text += ". Simulação: nenhum pedido real foi criado.";
+    meta.textContent = text;
   }
   document.getElementById("success-title").focus();
   announce("Pedido realizado com sucesso.");
+
+  // Após a confirmação, os dados do cartão (apenas em memória) são limpos do
+  // formulário — nada sensível permanece no DOM.
+  ["co-card-number", "co-card-name", "co-card-expiry", "co-card-cvv"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
 }
 
 /* --------------------------------------------------------------------------
