@@ -8,6 +8,7 @@
 import { products } from "../../data/products.js";
 import { formatBRL } from "../../utils/format.js";
 import { getFavorites, toggleFavorite, syncHeaderCounts } from "../store/store.js";
+import { getAuthUser, updateStoredUser } from "../auth/auth.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const PROFILE_KEY = "nexus:profile";
@@ -69,6 +70,20 @@ function write(key, value) {
 function getProfile() {
   const data = read(PROFILE_KEY);
   return data && typeof data === "object" ? data : {};
+}
+
+/* Dados exibidos: vêm do usuário da sessão quando autenticado; caso
+   contrário, mantém o perfil local (v1.9). */
+function getDisplayProfile() {
+  const user = getAuthUser();
+  if (user) {
+    return {
+      name: user.name || "",
+      email: user.email || "",
+      phone: user.phone || "",
+    };
+  }
+  return getProfile();
 }
 
 function saveProfile(data) {
@@ -203,7 +218,7 @@ function renderOverview() {
 
   const favorites = getFavorites();
   const addresses = getAddresses();
-  const profile = getProfile();
+  const profile = getDisplayProfile();
 
   const fav = document.getElementById("ov-favoritos");
   if (fav) fav.textContent = String(favorites.length);
@@ -231,7 +246,7 @@ function renderOverview() {
 -------------------------------------------------------------------------- */
 
 function renderDados() {
-  const profile = getProfile();
+  const profile = getDisplayProfile();
   const field = (id) => document.getElementById(id);
   const name = field("pf-name");
   const email = field("pf-email");
@@ -324,6 +339,13 @@ function handleProfileSubmit(event) {
     email: document.getElementById("pf-email").value.trim(),
     phone: document.getElementById("pf-phone").value.trim(),
   });
+  if (getAuthUser()) {
+    updateStoredUser({
+      name: document.getElementById("pf-name").value.trim(),
+      email: document.getElementById("pf-email").value.trim(),
+      phone: document.getElementById("pf-phone").value.trim(),
+    });
+  }
   showFeedback("profile-feedback", "Dados salvos com sucesso!");
 }
 
@@ -730,6 +752,19 @@ function bindEvents() {
 function init() {
   const section = sectionFromHash();
   state.section = section;
+
+  const authUser = getAuthUser();
+  const greeting = document.getElementById("profile-greeting");
+  const authBox = document.getElementById("profile-auth");
+
+  if (authUser) {
+    const firstName = String(authUser.name || "").trim().split(/\s+/)[0] || "";
+    if (greeting) greeting.textContent = firstName;
+    if (authBox) authBox.hidden = true;
+  } else {
+    if (greeting) greeting.textContent = "visitante";
+    if (authBox) authBox.hidden = false;
+  }
 
   for (const item of SECTIONS) {
     const panel = document.querySelector(`[data-panel="${item.id}"]`);

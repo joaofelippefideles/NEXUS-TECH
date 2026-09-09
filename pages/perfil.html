@@ -129,7 +129,7 @@
           </h1>
 
           <p class="profile__lead">
-            Olá, <strong>visitante</strong>! Gerencie seus dados, pedidos,
+            Olá, <strong id="profile-greeting">visitante</strong>! Gerencie seus dados, pedidos,
             endereços, favoritos e preferências em um só lugar.
           </p>
 
@@ -137,6 +137,15 @@
             Conta demonstrativa — nenhuma autenticação é exigida. Os dados
             permanecem apenas no seu navegador (localStorage).
           </p>
+
+          <!-- Estado não autenticado (v2.1) — controlado pelo profile.js -->
+          <div class="profile-auth" id="profile-auth" hidden>
+            <p class="profile-auth__text">
+              Faça login na sua conta cadastrada para gerenciar seus dados
+              como usuário autenticado.
+            </p>
+            <a href="login.html" class="btn btn--primary">Entrar na minha conta</a>
+          </div>
 
         </div>
 
