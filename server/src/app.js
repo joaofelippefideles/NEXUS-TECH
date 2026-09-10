@@ -12,7 +12,9 @@ const helmet = require("helmet");
 
 const healthRouter = require("./routes/health.routes");
 const productsRouter = require("./routes/products.routes");
+const adminAuthRouter = require("./routes/admin/auth.routes");
 const productsController = require("./controllers/products.controller");
+const { adminApiLimiter } = require("./middlewares/rateLimit");
 const notFound = require("./middlewares/notFound");
 const errorHandler = require("./middlewares/errorHandler");
 
@@ -34,6 +36,7 @@ app.use(
       if (corsOrigin.includes(origin)) return cb(null, true);
       return cb(null, false);
     },
+    credentials: true, // permite envio/recepção do cookie httpOnly de refresh
   })
 );
 
@@ -44,6 +47,9 @@ app.use("/api/health", healthRouter);
 app.use("/api/products", productsRouter);
 app.get("/api/categories", productsController.categories);
 app.get("/api/brands", productsController.brands);
+
+/* --- Admin --- */
+app.use("/api/admin/auth", adminApiLimiter, adminAuthRouter);
 
 app.get("/", (req, res) => {
   res.json({ name: "Nexus Tech API", health: "/api/health" });

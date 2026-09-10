@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+
+  <title>Painel — Nexus Tech</title>
+  <meta name="description" content="Painel administrativo da Nexus Tech. Fundação de autenticação real via API.">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' fill='%2306b6d4'>N</text></svg>">
+  <link rel="stylesheet" href="../../assets/css/admin.css">
+</head>
+<body data-page="admin-dashboard">
+
+  <div class="admin-shell">
+
+    <header class="admin-topbar">
+      <a href="index.html" class="admin-topbar__brand" aria-label="Nexus Tech — Painel">
+        NEXUS<span class="admin-topbar__brand-accent">TECH</span>
+        <span class="admin-topbar__brand-accent"> Admin</span>
+      </a>
+
+      <div class="admin-topbar__session">
+        <span class="admin-topbar__who">
+          <span class="admin-topbar__name" id="admin-topbar-name"></span>
+          <span class="admin-topbar__email" id="admin-topbar-email"></span>
+        </span>
+        <button type="button" class="admin-topbar__logout" id="admin-logout">Sair</button>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <h1 class="admin-main__title">
+        Olá, <span id="admin-greeting-name"></span>!
+      </h1>
+      <p class="admin-main__lead">
+        Bem-vindo(a) ao painel administrativo da Nexus Tech. A autenticação deste
+        ambiente já usa a API real (login, rotação de sessão e auditoria). As
+        próximas fases trazem o CRUD de produtos, categorias, marcas e estoque.
+      </p>
+
+      <p class="admin-loading" id="admin-loading" role="status">
+        <span class="admin-loading__spinner" aria-hidden="true"></span>
+        Verificando sessão...
+      </p>
+
+      <section class="admin-panel" id="admin-panel" hidden aria-label="Painel administrativo">
+        <p class="admin-panel__empty">
+          Este painel ainda está em fase de fundação: por decisão de projeto
+          (v3.0-X1), nenhum dado fictício é renderizado aqui. Os módulos de
+          gestão começarão na próxima fase, consumindo a API real.
+        </p>
+      </section>
+    </main>
+
+  </div>
+
+  <script type="module" src="../../assets/js/modules/admin/shell.js"></script>
+</body>
+</html>
