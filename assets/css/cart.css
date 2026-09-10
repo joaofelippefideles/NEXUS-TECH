@@ -24,6 +24,10 @@
   overflow-wrap: break-word;
 }
 
+.cart__title-accent {
+  color: var(--color-brand-400);
+}
+
 @media (min-width: 768px) {
   .cart__title { font-size: var(--text-4xl); }
 }

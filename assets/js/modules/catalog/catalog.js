@@ -14,6 +14,7 @@
    ========================================================================== */
 
 import { products } from "../../data/products.js";
+import { addToCart, isFavorite, toggleFavorite, syncHeaderCounts } from "../store/store.js";
 import { defaultState, queryCatalog, buildFacets } from "./filter.js";
 import { renderCards, renderEmptyState, renderMeta } from "./render.js";
 import {
@@ -45,6 +46,80 @@ function CatalogController(container) {
   const paginationRoot = container.querySelector("#catalog-pagination");
 
   if (!gridEl) return null;
+
+  function byId(id) {
+    return products.find((product) => String(product.id) === String(id));
+  }
+
+  /* Região de status acessível (leitura por leitores de tela). */
+  function announce(message) {
+    const status = document.getElementById("catalog-status") || createStatus();
+    status.textContent = message;
+  }
+
+  function createStatus() {
+    const status = document.createElement("p");
+    status.id = "catalog-status";
+    status.className = "sr-only";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    document.body.appendChild(status);
+    return status;
+  }
+
+  /* Ações dos cards (Favoritar / Adicionar ao carrinho) por delegação única
+     no grid: sobrevive aos re-renders de filtros/paginação sem religar
+     eventos, mesmo padrão da home (v2.5). */
+  function handleCardAction(event) {
+    const favButton = event.target.closest(".product-card__fav");
+    if (favButton) {
+      const card = favButton.closest(".product-card");
+      const product = byId(card && card.dataset.productId);
+      if (!product) return;
+
+      toggleFavorite(product.id);
+      const fav = isFavorite(product.id);
+      favButton.setAttribute("aria-pressed", String(fav));
+      favButton.classList.toggle("is-faved", fav);
+      syncHeaderCounts();
+      announce(
+        fav
+          ? `${product.name} adicionado aos favoritos.`
+          : `${product.name} removido dos favoritos.`,
+      );
+      return;
+    }
+
+    const addButton = event.target.closest("[data-add-to-cart]");
+    if (addButton && !addButton.disabled) {
+      const card = addButton.closest(".product-card");
+      const product = byId(card && card.dataset.productId);
+      if (!product) return;
+
+      const added = addToCart(product.id, 1, product.stock);
+      if (added === null) {
+        announce(`Limite de estoque de ${product.name} atingido.`);
+        return;
+      }
+      syncHeaderCounts();
+      announce(`${product.name} adicionado ao carrinho.`);
+    }
+  }
+
+  gridEl.addEventListener("click", handleCardAction);
+
+  /* Estado visual inicial dos favoritos nos cards recém-renderizados. */
+  function syncFavoriteStates() {
+    gridEl.querySelectorAll(".product-card__fav").forEach((btn) => {
+      const card = btn.closest(".product-card");
+      const product = byId(card && card.dataset.productId);
+      if (!product) return;
+
+      const fav = isFavorite(product.id);
+      btn.setAttribute("aria-pressed", String(fav));
+      btn.classList.toggle("is-faved", fav);
+    });
+  }
 
   /* --- Construção única dos controles --- */
   let filterHandles = null;
@@ -101,6 +176,7 @@ function CatalogController(container) {
 
     if (filterHandles) syncFilters(filterHandles, state);
     if (sortHandle) syncSort(sortHandle, state);
+    syncFavoriteStates();
   }
 
   function clearFilters() {

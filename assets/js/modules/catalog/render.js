@@ -218,13 +218,18 @@ export function createCard(product) {
   viewBtn.textContent = "Ver produto";
   actions.appendChild(viewBtn);
 
-  /* Botão preparado para a futura integração de carrinho (Sprint 5+). */
+  /* Botão de adicionar ao carrinho — ação delegada no grid (catalog.js). */
   const cartBtn = document.createElement("button");
   cartBtn.type = "button";
   cartBtn.className = "btn btn--primary";
   cartBtn.dataset.addToCart = String(product.id);
-  cartBtn.setAttribute("aria-label", `Adicionar ${product.name} ao carrinho`);
-  cartBtn.textContent = "Adicionar";
+  if (Number(product.stock) <= 0) {
+    cartBtn.disabled = true;
+    cartBtn.textContent = "Esgotado";
+  } else {
+    cartBtn.setAttribute("aria-label", `Adicionar ${product.name} ao carrinho`);
+    cartBtn.textContent = "Adicionar";
+  }
   actions.appendChild(cartBtn);
 
   body.appendChild(actions);
