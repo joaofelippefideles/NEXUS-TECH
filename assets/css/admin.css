@@ -794,3 +794,80 @@
     justify-self: start;
   }
 }
+
+/* ===========================================================================
+   v3.0-X3 — Dashboard do admin
+   =========================================================================== */
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.admin-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.admin-stat--warn {
+  border-color: var(--color-warning, #d9a400);
+  background: var(--color-warning-soft, #fff4d6);
+}
+
+.admin-stat--warn .admin-stat__value {
+  color: var(--color-warning-text, #7a5b00);
+}
+
+.admin-stat__value {
+  font-family: var(--font-family-brand);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  line-height: 1.1;
+}
+
+.admin-stat__label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-text-muted);
+}
+
+.admin-dashactions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+
+.admin-card--flat {
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.admin-card--flat .admin-table thead th {
+  background: transparent;
+}
+
+.admin-card--flat .admin-table th,
+.admin-card--flat .admin-table td {
+  border-bottom-color: var(--color-border);
+}
+
+.admin-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}

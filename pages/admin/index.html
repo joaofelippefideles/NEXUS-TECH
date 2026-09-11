@@ -24,6 +24,8 @@
       <nav class="admin-nav" aria-label="Navegação do painel">
         <a href="index.html" class="admin-nav__link is-active" aria-current="page">Dashboard</a>
         <a href="products.html" class="admin-nav__link">Produtos</a>
+        <a href="brands.html" class="admin-nav__link">Marcas</a>
+        <a href="categories.html" class="admin-nav__link">Categorias</a>
       </nav>
 
       <div class="admin-topbar__session">
@@ -40,27 +42,81 @@
         Olá, <span id="admin-greeting-name"></span>!
       </h1>
       <p class="admin-main__lead">
-        Bem-vindo(a) ao painel administrativo da Nexus Tech. A autenticação deste
-        ambiente já usa a API real (login, rotação de sessão e auditoria). O
-        módulo de gestão de produtos também consome a API real.
+        Bem-vindo(a) ao painel administrativo da Nexus Tech. As informações
+        abaixo são dados reais, consumidos da API.
       </p>
 
       <p class="admin-loading" id="admin-loading" role="status">
         <span class="admin-loading__spinner" aria-hidden="true"></span>
-        Verificando sessão...
+        Carregando indicadores...
       </p>
 
       <section class="admin-panel" id="admin-panel" hidden aria-label="Painel administrativo">
-        <div class="admin-panel__actions">
-          <a href="products.html" class="admin-btn admin-btn--primary">
-            Gerenciar produtos
-          </a>
+
+        <div class="admin-state admin-state--error" id="db-error" hidden>
+          <p id="db-error-msg"></p>
         </div>
+
+        <div class="admin-stats" aria-label="Indicadores do catálogo">
+          <div class="admin-stat">
+            <span class="admin-stat__value" id="db-products-active">—</span>
+            <span class="admin-stat__label">Produtos ativos</span>
+          </div>
+          <div class="admin-stat">
+            <span class="admin-stat__value" id="db-products-inactive">—</span>
+            <span class="admin-stat__label">Produtos inativos</span>
+          </div>
+          <div class="admin-stat">
+            <span class="admin-stat__value" id="db-brands">—</span>
+            <span class="admin-stat__label">Marcas</span>
+          </div>
+          <div class="admin-stat">
+            <span class="admin-stat__value" id="db-categories">—</span>
+            <span class="admin-stat__label">Categorias</span>
+          </div>
+          <div class="admin-stat admin-stat--warn">
+            <span class="admin-stat__value" id="db-out-stock">—</span>
+            <span class="admin-stat__label">Produtos sem estoque</span>
+          </div>
+        </div>
+
+        <div class="admin-dashactions">
+          <a href="products.html" class="admin-btn admin-btn--primary">Gerenciar produtos</a>
+          <a href="brands.html" class="admin-btn admin-btn--secondary">Gerenciar marcas</a>
+          <a href="categories.html" class="admin-btn admin-btn--secondary">Gerenciar categorias</a>
+        </div>
+
+        <div class="admin-card admin-card--flat">
+          <div class="admin-card__head">
+            <h2 class="admin-repeater__title">Últimas ações (auditoria)</h2>
+            <span class="admin-muted" id="db-audit-total"></span>
+          </div>
+
+          <div class="admin-state admin-state--empty" id="db-audit-empty" hidden>
+            Nenhuma ação registrada até o momento.
+          </div>
+
+          <div class="admin-table-wrap" id="db-audit-rows" hidden>
+            <table class="admin-table">
+              <caption class="visually-hidden">Últimas ações administrativas</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Ação</th>
+                  <th scope="col">Responsável</th>
+                  <th scope="col">Quando</th>
+                </tr>
+              </thead>
+              <tbody id="db-audit-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
       </section>
     </main>
 
   </div>
 
   <script type="module" src="../../assets/js/modules/admin/shell.js"></script>
+  <script type="module" src="../../assets/js/modules/admin/dashboard.js"></script>
 </body>
 </html>
