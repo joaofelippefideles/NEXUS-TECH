@@ -23,6 +23,9 @@ function buildWhere(options) {
   const clauses = [];
   const params = [];
 
+  // Soft-delete do Admin: a storefront só vê produtos ATIVOS (v3.0-X2).
+  clauses.push("p.is_active = 1");
+
   if (options.q) {
     clauses.push("(p.name LIKE ? OR b.name LIKE ? OR c.name LIKE ?)");
     const like = `%${options.q}%`;
@@ -163,7 +166,7 @@ async function findOneBy(column, value) {
     INNER JOIN brands b ON b.id = p.brand_id
     INNER JOIN categories c ON c.id = p.category_id
     LEFT JOIN inventory i ON i.product_id = p.id
-    WHERE ${safeColumn} = ?
+    WHERE ${safeColumn} = ? AND p.is_active = 1
     LIMIT 1`;
 
   const [rows] = await pool.query(sql, [value]);
@@ -190,12 +193,12 @@ async function findProductBySlug(slug) {
   return findOneBy("slug", slug);
 }
 
-/* Categorias com contagem de produtos (facetas). */
+/* Categorias com contagem de produtos (facetas) — só produtos ativos. */
 async function listCategories() {
   const [rows] = await pool.query(`
     SELECT c.name, c.slug, COUNT(p.id) AS count
     FROM categories c
-    LEFT JOIN products p ON p.category_id = c.id
+    LEFT JOIN products p ON p.category_id = c.id AND p.is_active = 1
     GROUP BY c.id, c.name, c.slug
     ORDER BY c.name ASC`);
   return rows.map((r) => ({
@@ -205,12 +208,12 @@ async function listCategories() {
   }));
 }
 
-/* Marcas com contagem de produtos. */
+/* Marcas com contagem de produtos — só produtos ativos. */
 async function listBrands() {
   const [rows] = await pool.query(`
     SELECT b.name, COUNT(p.id) AS count
     FROM brands b
-    LEFT JOIN products p ON p.brand_id = b.id
+    LEFT JOIN products p ON p.brand_id = b.id AND p.is_active = 1
     GROUP BY b.id, b.name
     ORDER BY b.name ASC`);
   return rows.map((r) => ({

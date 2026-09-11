@@ -11,6 +11,8 @@
 const ADMIN_API_BASE = "http://127.0.0.1:4000/api/admin";
 
 let accessToken = null; // apenas em memória
+let refreshInFlight = null; // deduplica rotações concorrentes (vários módulos)
+let sessionCache = null; // sessão atual por página (invalidada em logout/401)
 
 function buildHeaders(hasBody) {
   const headers = {};
@@ -19,24 +21,32 @@ function buildHeaders(hasBody) {
   return headers;
 }
 
-/* Roda uma rotação de sessão. Retorna true se um novo access token foi obtido. */
+/* Roda UMA rotação de sessão por vez. Retorna true se um novo access token
+   foi obtido. Concorrência (ex.: shell + products.js) compartilha o mesmo
+   refresh — nunca revogam a rotação um do outro. */
 async function tryRefresh() {
-  try {
-    const res = await fetch(`${ADMIN_API_BASE}/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!res.ok) {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${ADMIN_API_BASE}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        accessToken = null;
+        return false;
+      }
+      const data = await res.json();
+      accessToken = data && data.data && data.data.accessToken ? data.data.accessToken : null;
+      return Boolean(accessToken);
+    } catch (err) {
       accessToken = null;
       return false;
     }
-    const data = await res.json();
-    accessToken = data && data.data && data.data.accessToken ? data.data.accessToken : null;
-    return Boolean(accessToken);
-  } catch (err) {
-    accessToken = null;
-    return false;
-  }
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 /* Requisição autenticada às rotas administrativas. */
@@ -61,8 +71,9 @@ async function request(path, options = {}) {
     const refreshed = await tryRefresh();
     if (refreshed) {
       response = await doFetch();
-    } else if (!isLoginPage) {
-      window.location.replace("login.html"); // sessão realmente encerrada
+    } else {
+      sessionCache = false; // sessão realmente encerrada
+      if (!isLoginPage) window.location.replace("login.html");
     }
   }
 
@@ -84,6 +95,7 @@ async function login({ email, password }) {
   }
 
   accessToken = data && data.data && data.data.accessToken ? data.data.accessToken : null;
+  sessionCache = data && data.data && data.data.user ? data.data.user : false;
   return data.data ? data.data.user : null;
 }
 
@@ -96,15 +108,44 @@ async function logout() {
     });
   } finally {
     accessToken = null;
+    sessionCache = false;
   }
 }
 
-/* Sessão atual (GET /auth/me). Retorna o admin seguro ou null. */
+/* Sessão atual (GET /auth/me). Cache de página: evita /me concorrentes entre
+   shell.js e os módulos de gestão, que causavam rotações paralelas. */
 async function getSession() {
+  if (sessionCache) return sessionCache;
   const res = await request("/auth/me");
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.data || null;
+  const session = res.ok ? ((await res.json()).data || null) : null;
+  sessionCache = session || false;
+  return session || null;
 }
 
-export { login, logout, getSession, request };
+/* Serializa parâmetros de query ignorando vazios/undefined (curl amigável). */
+function buildQuery(params = {}) {
+  const usp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value)) {
+      for (const item of value) usp.append(key, String(item));
+    } else {
+      usp.append(key, String(value));
+    }
+  }
+  const qs = usp.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/* Requisição autenticada que já devolve {data[, meta]} ou lança Erro.
+   Usada pelas rotinas de gestão (ex.: produtos). Nunca faz cache em storage. */
+async function apiRequest(path, options = {}) {
+  const res = await request(path, options);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data && data.error) || "Falha na requisição");
+  }
+  return res.status === 204 ? null : res.json().catch(() => null);
+}
+
+export { login, logout, getSession, request, apiRequest, buildQuery };

@@ -21,6 +21,11 @@
         <span class="admin-topbar__brand-accent"> Admin</span>
       </a>
 
+      <nav class="admin-nav" aria-label="Navegação do painel">
+        <a href="index.html" class="admin-nav__link is-active" aria-current="page">Dashboard</a>
+        <a href="products.html" class="admin-nav__link">Produtos</a>
+      </nav>
+
       <div class="admin-topbar__session">
         <span class="admin-topbar__who">
           <span class="admin-topbar__name" id="admin-topbar-name"></span>
@@ -36,8 +41,8 @@
       </h1>
       <p class="admin-main__lead">
         Bem-vindo(a) ao painel administrativo da Nexus Tech. A autenticação deste
-        ambiente já usa a API real (login, rotação de sessão e auditoria). As
-        próximas fases trazem o CRUD de produtos, categorias, marcas e estoque.
+        ambiente já usa a API real (login, rotação de sessão e auditoria). O
+        módulo de gestão de produtos também consome a API real.
       </p>
 
       <p class="admin-loading" id="admin-loading" role="status">
@@ -46,11 +51,11 @@
       </p>
 
       <section class="admin-panel" id="admin-panel" hidden aria-label="Painel administrativo">
-        <p class="admin-panel__empty">
-          Este painel ainda está em fase de fundação: por decisão de projeto
-          (v3.0-X1), nenhum dado fictício é renderizado aqui. Os módulos de
-          gestão começarão na próxima fase, consumindo a API real.
-        </p>
+        <div class="admin-panel__actions">
+          <a href="products.html" class="admin-btn admin-btn--primary">
+            Gerenciar produtos
+          </a>
+        </div>
       </section>
     </main>
 

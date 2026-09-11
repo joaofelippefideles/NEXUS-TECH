@@ -13,7 +13,10 @@ const helmet = require("helmet");
 const healthRouter = require("./routes/health.routes");
 const productsRouter = require("./routes/products.routes");
 const adminAuthRouter = require("./routes/admin/auth.routes");
+const adminProductsRouter = require("./routes/admin/products.routes");
 const productsController = require("./controllers/products.controller");
+const adminProductsController = require("./controllers/admin/products.controller");
+const { requireAdmin } = require("./middlewares/requireAdmin");
 const { adminApiLimiter } = require("./middlewares/rateLimit");
 const notFound = require("./middlewares/notFound");
 const errorHandler = require("./middlewares/errorHandler");
@@ -50,6 +53,9 @@ app.get("/api/brands", productsController.brands);
 
 /* --- Admin --- */
 app.use("/api/admin/auth", adminApiLimiter, adminAuthRouter);
+app.use("/api/admin/products", requireAdmin, adminApiLimiter, adminProductsRouter);
+app.get("/api/admin/brands", requireAdmin, adminApiLimiter, adminProductsController.brands);
+app.get("/api/admin/categories", requireAdmin, adminApiLimiter, adminProductsController.categories);
 
 app.get("/", (req, res) => {
   res.json({ name: "Nexus Tech API", health: "/api/health" });
