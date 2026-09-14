@@ -1,16 +1,22 @@
 /* ==========================================================================
-   NEXUS TECH — Login de usuário comum (v2.1)
-   Validação + sessão MOCK vinculada ao usuário cadastrado ("nexus:user").
+   NEXUS TECH — Login de usuário comum (v3.2)
+   Validação + sessão real (API) ou MOCK.
 
-   SEGURANÇA / LIMITAÇÃO DOCUMENTADA:
-   - não existe senha persistida (v2.0); a senha digitada é validada apenas
-     em memória nesta página e descartada em seguida;
+   MODOS (config.js — sem editar este módulo):
+   - "mock" (DEFAULT): sessão vinculada ao usuário cadastrado ("nexus:user");
+   - "api" : POST /api/auth/login -> cookie httpOnly + access token em
+     memória; confirmação via GET /api/auth/me.
+
+   SEGURANÇA / LIMITAÇÕES DOCUMENTADAS:
    - a senha NUNCA é gravada em localStorage, sessionStorage, cookies, URL,
-     HTML ou logs de console;
-   - a sessão criada (sessionStorage "nexus:auth") contém apenas
-     { userId, authenticatedAt } — dados não sensíveis;
-   - o acesso é simulado: se o e-mail cadastrado bater e a senha for
-     informada, a sessão da aba é criada (preparação para o backend).
+     HTML ou logs;
+   - no modo api o access token vive SOMENTE na memória do user-api.js;
+   - o refresh token fica em cookie httpOnly (nt_user_refresh) — inacessível
+     ao JavaScript;
+   - no modo mock não existe senha persistida (v2.0): a sessão da aba
+     ("nexus:auth") contém apenas { userId, authenticatedAt };
+   - o parâmetro ?next é sanitizado (regex) e aceita somente um arquivo HTML
+     local — valores externos/arbitrários são ignorados.
    ========================================================================== */
 
 import {
@@ -19,7 +25,12 @@ import {
   createSession,
   syncAuthHeader,
   authBasePath,
+  authReady,
+  setAuthenticatedUser,
 } from "./auth.js";
+
+import { isStorefrontAuthApiEnabled } from "../../utils/config.js";
+import userApi from "../../utils/user-api.js";
 
 const VALIDATORS = {
   email: (value) => {
@@ -118,7 +129,68 @@ function nextPage() {
   }
 }
 
-function handleSubmit(event) {
+/* Erros da API em mensagens amigáveis (sem revelar detalhes internos). */
+function mapLoginError(err) {
+  const status = err && err.status;
+  if (!status || status === 0) {
+    return "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.";
+  }
+  if (status === 401) {
+    return "E-mail ou senha inválidos.";
+  }
+  if (status === 429) {
+    return "Muitas tentativas de login. Tente novamente mais tarde.";
+  }
+  if (status >= 500) {
+    return "Ocorreu um erro inesperado no servidor. Tente novamente em instantes.";
+  }
+  if (err && typeof err.message === "string" && err.message !== "") {
+    return err.message;
+  }
+  return "Não foi possível entrar. Revise os dados e tente novamente.";
+}
+
+function redirectAfterLogin() {
+  const target = authBasePath() + (nextPage() || "perfil.html");
+  window.setTimeout(() => {
+    window.location.href = target;
+  }, 600);
+}
+
+/* Login REAL (modo api): login -> confirma /me -> header -> redirect. */
+async function submitToApi(email, password) {
+  try {
+    const data = await userApi.login({ email, password });
+    let user = data && data.user && data.user.id ? data.user : null;
+
+    // Confirma a sessão pelo endpoint protegido (o token fica em memória).
+    try {
+      const meUser = await userApi.me();
+      if (meUser && meUser.id) user = meUser;
+    } catch (err) {
+      // login já retornou sessão válida; /me é confirmação adicional
+    }
+    if (!user) user = { email };
+
+    setAuthenticatedUser(user);
+    syncAuthHeader();
+
+    const firstName = String(user.name || "").trim().split(/\s+/)[0] || "";
+    showFeedback(`Bem-vindo(a)${firstName ? ", " + firstName : ""}! Entrando na sua conta...`, "success");
+    announce("Login realizado com sucesso!");
+    redirectAfterLogin();
+  } catch (err) {
+    showFeedback(mapLoginError(err), "warning");
+    if (err && err.status === 401) {
+      document.getElementById("login-email").focus();
+    } else {
+      const submit = document.getElementById("login-submit");
+      if (submit) submit.focus();
+    }
+  }
+}
+
+async function handleSubmit(event) {
   event.preventDefault();
 
   const form = document.getElementById("login-form");
@@ -132,6 +204,13 @@ function handleSubmit(event) {
   }
 
   const email = document.getElementById("login-email").value.trim().toLowerCase();
+  const password = document.getElementById("login-password").value;
+
+  if (isStorefrontAuthApiEnabled()) {
+    await submitToApi(email, password);
+    return;
+  }
+
   const user = getStoredUser();
 
   if (!user || String(user.email || "").trim().toLowerCase() !== email) {
@@ -146,11 +225,7 @@ function handleSubmit(event) {
   const firstName = String(user.name || "").trim().split(/\s+/)[0] || "";
   showFeedback(`Bem-vindo(a)${firstName ? ", " + firstName : ""}! Entrando na sua conta...`, "success");
   announce("Login realizado com sucesso!");
-
-  const target = authBasePath() + (nextPage() || "perfil.html");
-  window.setTimeout(() => {
-    window.location.href = target;
-  }, 600);
+  redirectAfterLogin();
 }
 
 /* --------------------------------------------------------------------------
@@ -173,8 +248,31 @@ function bindEvents() {
   });
 }
 
+/* Modo api: aguarda o boot (refresh -> /me) e, se já houver sessão, vai
+   direto ao destino. Não usa o storage mock para decidir. */
+async function initApi() {
+  hideFeedback();
+  bindEvents();
+
+  let user = null;
+  try {
+    user = await authReady();
+  } catch (err) {
+    user = null;
+  }
+
+  if (user && user.id) {
+    window.location.replace(authBasePath() + (nextPage() || "perfil.html"));
+  }
+}
+
 function init() {
-  // Já autenticado? Vai direto para o destino (ou Minha conta), sem recarregar.
+  if (isStorefrontAuthApiEnabled()) {
+    initApi();
+    return;
+  }
+
+  // Mock: já autenticado? Vai direto para o destino, sem recarregar.
   if (getAuthUser()) {
     window.location.replace(authBasePath() + (nextPage() || "perfil.html"));
     return;
