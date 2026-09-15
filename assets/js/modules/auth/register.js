@@ -1,19 +1,21 @@
 /* ==========================================================================
-   NEXUS TECH — Cadastro de usuário (v2.0)
+   NEXUS TECH — Cadastro de usuário (v2.1)
    Validação completa no frontend + persistência MOCK de dados NÃO sensíveis
-   em localStorage (chave "nexus:user").
+   em localStorage (chave "nexus:user") OU cadastro real via API.
+
+   MODOS (config.js — sem editar os módulos):
+   - "mock" (DEFAULT): comportamento atual, nada vai a /api;
+   - "api" : POST /api/auth/register via user-api.js (user_profile criado).
 
    SEGURANÇA DA SENHA:
-   - a senha e a confirmação são verificadas SOMENTE na sessão da página;
-   - NUNCA são gravadas em localStorage, sessionStorage ou cookies;
-   - não existe senha de exemplo nem autenticação real nesta etapa.
-
-   Regras:
-   - impede o submit real, sem requisições e sem chamadas a /api;
-   - CPF validado com o algoritmo oficial de dígitos verificadores e rejeita
-     sequências obviamente inválidas;
-   - duplicidade simulada comparando o e-mail do usuário já armazenado.
+   - a senha/confirmação transitam SOMENTE em memória/corpo do POST;
+   - NUNCA são gravadas em localStorage, sessionStorage, cookies ou URL;
+   - o cadastro real NÃO gera/armazena access token (sessão segue mock);
+   - erros da API mapeados sem revelar detalhes internos (5xx genérico).
    ========================================================================== */
+
+import { isStorefrontAuthApiEnabled } from "../../utils/config.js";
+import userApi from "../../utils/user-api.js";
 
 const USER_KEY = "nexus:user";
 
@@ -195,7 +197,69 @@ function showFeedback(message, type) {
    SUBMIT
 -------------------------------------------------------------------------- */
 
-function handleSubmit(event) {
+function readNonSensitive() {
+  return {
+    name: document.getElementById("register-name").value.trim(),
+    email: document.getElementById("register-email").value.trim().toLowerCase(),
+    phone: document.getElementById("register-phone").value.trim(),
+    cpf: document.getElementById("register-cpf").value.trim(),
+  };
+}
+
+/* Error mapping da API — sem revelar detalhes internos nem senha. */
+function mapRegisterError(err) {
+  const status = err && err.status;
+  if (!status || status === 0) {
+    return "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.";
+  }
+  if (status >= 500) {
+    return "Ocorreu um erro inesperado no servidor. Tente novamente em instantes.";
+  }
+  if (err && typeof err.message === "string" && err.message !== "") {
+    return err.message; // 400 (dados inválidos) e 409 (e-mail/CPF) — mensagem do servidor
+  }
+  return "Não foi possível criar a conta. Revise os dados e tente novamente.";
+}
+
+/* Cadastro REAL (modo api). Persiste APENAS dados não sensíveis; o access
+   token NÃO existe no cadastro (sessão segue mock). Resposta 201 = sucesso. */
+async function submitToApi(user) {
+  const password = document.getElementById("register-password").value;
+  const passwordConfirm = document.getElementById("register-password-confirm").value;
+
+  try {
+    const data = await userApi.register({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      cpf: user.cpf,
+      password,
+      passwordConfirm,
+    });
+
+    const serverUser =
+      data && data.user && typeof data.user === "object" ? data.user : {};
+    saveUser({
+      id: serverUser.id || undefined,
+      name: serverUser.name || user.name,
+      email: serverUser.email || user.email,
+      phone: user.phone,
+      cpf: user.cpf,
+      createdAt: serverUser.createdAt || undefined,
+    });
+    showSuccess({ name: serverUser.name || user.name });
+  } catch (err) {
+    showFeedback(mapRegisterError(err), "warning");
+    if (err && err.status === 409) {
+      document.getElementById("register-email").focus();
+    } else {
+      const submit = document.getElementById("register-submit");
+      if (submit) submit.focus();
+    }
+  }
+}
+
+async function handleSubmit(event) {
   event.preventDefault();
 
   const form = document.getElementById("register-form");
@@ -208,28 +272,26 @@ function handleSubmit(event) {
     return;
   }
 
-  const email = document.getElementById("register-email").value.trim().toLowerCase();
-  const stored = getStoredUser();
+  const user = readNonSensitive();
 
-  if (stored && stored.email === email) {
+  if (isStorefrontAuthApiEnabled()) {
+    await submitToApi(user);
+    return;
+  }
+
+  const stored = getStoredUser();
+  if (stored && stored.email === user.email) {
     showFeedback("Já existe uma conta cadastrada com este e-mail.", "warning");
     document.getElementById("register-email").focus();
     return;
   }
-
-  const user = {
-    name: document.getElementById("register-name").value.trim(),
-    email,
-    phone: document.getElementById("register-phone").value.trim(),
-    cpf: document.getElementById("register-cpf").value.trim(),
-  };
 
   saveUser(user);
   showSuccess(user);
 }
 
 /* --------------------------------------------------------------------------
-   SUCESSO (mock — sem autenticação real nesta etapa)
+   SUCESSO (mock e api — nenhum token/sessão real é criado nesta fase)
 -------------------------------------------------------------------------- */
 
 function showSuccess(user) {

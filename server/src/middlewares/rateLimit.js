@@ -1,7 +1,8 @@
 /* ==========================================================================
-   NEXUS TECH — Rate limiting (Admin)
-   - loginLimiter: 5–10 tentativas / 15 min por IP+email (aplicado em /login).
-   - adminApiLimiter: ~120 req/min/IP para as rotas administrativas.
+   NEXUS TECH — Rate limiting (Admin e Usuário)
+   - loginLimiter: 5–10 tentativas / 15 min por IP+email (aplicado em /login);
+   - adminApiLimiter: ~120 req/min/IP para as rotas administrativas;
+   - userApiLimiter: ~120 req/min/IP para as rotas de autenticação de usuário.
    Rotas públicas do catálogo/health não são limitadas por aqui.
    ========================================================================== */
 
@@ -33,4 +34,12 @@ const adminApiLimiter = rateLimit({
   message: { error: "Limite de requisições atingido. Tente novamente mais tarde." },
 });
 
-module.exports = { loginLimiter, adminApiLimiter };
+const userApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Limite de requisições atingido. Tente novamente mais tarde." },
+});
+
+module.exports = { loginLimiter, adminApiLimiter, userApiLimiter };

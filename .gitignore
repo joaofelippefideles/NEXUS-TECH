@@ -39,6 +39,7 @@ pnpm-lock.yaml
 server/vendor/
 server/.env
 server/.env.local
+server/data/admins.json
 .env
 .env.local
 .env.*.local

@@ -17,9 +17,10 @@ const adminProductsRouter = require("./routes/admin/products.routes");
 const adminBrandsRouter = require("./routes/admin/brands.routes");
 const adminCategoriesRouter = require("./routes/admin/categories.routes");
 const adminDashboardRouter = require("./routes/admin/dashboard.routes");
+const userAuthRouter = require("./routes/user/auth.routes");
 const productsController = require("./controllers/products.controller");
 const { requireAdmin } = require("./middlewares/requireAdmin");
-const { adminApiLimiter } = require("./middlewares/rateLimit");
+const { adminApiLimiter, userApiLimiter } = require("./middlewares/rateLimit");
 const notFound = require("./middlewares/notFound");
 const errorHandler = require("./middlewares/errorHandler");
 
@@ -52,6 +53,9 @@ app.use("/api/health", healthRouter);
 app.use("/api/products", productsRouter);
 app.get("/api/categories", productsController.categories);
 app.get("/api/brands", productsController.brands);
+
+/* --- Usuário --- */
+app.use("/api/auth", userApiLimiter, userAuthRouter);
 
 /* --- Admin --- */
 app.use("/api/admin/auth", adminApiLimiter, adminAuthRouter);

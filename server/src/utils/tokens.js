@@ -1,9 +1,10 @@
 /* ==========================================================================
-   NEXUS TECH — Utilitários de token (autenticação Admin)
+   NEXUS TECH — Utilitários de token (autenticação Admin e Usuário)
    - Access token:  JWT HS256, expiração 30min, claims mínimos { sub, role }.
    - Refresh token: aleatório criptograficamente seguro; persistido somente
      como hash SHA-256; expiração 7 dias, cookie httpOnly + SameSite=Strict
-     e Path restrito (/api/admin/auth). Rotação/revogação no lado do serviço.
+     e Path restrito ao domínio de autenticação usado (admin/usuário).
+     Rotação/revogação no lado do serviço.
    Nenhum secret é hardcoded aqui — vêm de variáveis de ambiente.
    ========================================================================== */
 
@@ -16,6 +17,9 @@ const ACCESS_TOKEN_TTL_SECONDS = 30 * 60;
 
 const REFRESH_COOKIE_NAME = "nt_admin_refresh";
 const REFRESH_COOKIE_PATH = "/api/admin/auth";
+
+const USER_REFRESH_COOKIE_NAME = "nt_user_refresh";
+const USER_REFRESH_COOKIE_PATH = "/api/auth";
 
 /* Lê um secret obrigatório do ambiente. Lança se ausente/vazio. */
 function requireSecret(name) {
@@ -57,13 +61,15 @@ function refreshTokenExpiresAt() {
   return new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
 }
 
-/* Atributos do cookie de refresh (dev local http -> secure: false). */
-function refreshCookieOptions() {
+/* Atributos do cookie de refresh (dev local http -> secure: false).
+   aceita override de name/path p/ distinguir admin (/api/admin/auth)
+   de usuário (/api/auth). */
+function refreshCookieOptions(overrides = {}) {
   return {
     httpOnly: true,
     sameSite: "strict",
     secure: process.env.NODE_ENV === "production", // TLS em produção
-    path: REFRESH_COOKIE_PATH,
+    path: overrides.path || REFRESH_COOKIE_PATH,
     maxAge: REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
   };
 }
@@ -87,6 +93,8 @@ module.exports = {
   REFRESH_TOKEN_TTL_DAYS,
   REFRESH_COOKIE_NAME,
   REFRESH_COOKIE_PATH,
+  USER_REFRESH_COOKIE_NAME,
+  USER_REFRESH_COOKIE_PATH,
   requireSecret,
   signAccessToken,
   verifyAccessToken,
