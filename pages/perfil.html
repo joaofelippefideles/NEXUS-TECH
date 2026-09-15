@@ -273,6 +273,23 @@
                     <p class="contact-form__error" id="pf-phone-error">Informe um telefone com DDD (mínimo 8 dígitos).</p>
                   </div>
 
+                  <div class="contact-form__field">
+                    <label class="contact-form__label" for="pf-cpf">CPF</label>
+                    <input
+                      class="contact-form__input"
+                      type="text"
+                      id="pf-cpf"
+                      name="cpf"
+                      data-validate="cpf"
+                      autocomplete="off"
+                      inputmode="numeric"
+                      maxlength="14"
+                      placeholder="000.000.000-00"
+                      aria-describedby="pf-cpf-error"
+                    >
+                    <p class="contact-form__error" id="pf-cpf-error">Informe um CPF válido (formato 000.000.000-00).</p>
+                  </div>
+
                   <div class="contact-form__actions">
                     <button type="submit" class="btn btn--primary" id="pf-submit">Salvar alterações</button>
                   </div>

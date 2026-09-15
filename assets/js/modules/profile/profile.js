@@ -23,14 +23,18 @@
      dados sensíveis (método de entrega/pagamento apenas).
    - cards de visão geral e pedidos refletem a quantidade real do usuário.
 
-   NENHUMA senha é persistida ou exibida. Nenhuma requisição ao servidor
-   (o projeto é 100% frontend simulado, sem backend).
+   NENHUMA senha é persistida ou exibida. No modo mock, nenhuma requisição ao
+   servidor (o projeto é simulado); no modo api (config.js), a identidade vem
+   de /me (authReady) e phone/cpf de GET/PATCH /api/auth/profile — name/email
+   somente leitura, erros mapeados sem alert().
    ========================================================================== */
 
 import { products } from "../../data/products.js";
 import { formatBRL } from "../../utils/format.js";
 import { getFavorites, toggleFavorite, syncHeaderCounts } from "../store/store.js";
-import { getAuthUser, getSession, updateStoredUser } from "../auth/auth.js";
+import { isStorefrontAuthApiEnabled } from "../../utils/config.js";
+import userApi from "../../utils/user-api.js";
+import { authReady, getAuthUser, getSession, updateStoredUser } from "../auth/auth.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const PROFILE_KEY = "nexus:profile";
@@ -59,6 +63,10 @@ const VALIDATORS = {
   phone: (value) =>
     normalizeDigits(value).length >= 8 ||
     "Informe um telefone com DDD (mínimo 8 dígitos).",
+  cpf: (value) =>
+    value.trim() === "" ||
+    isValidCpf(value) ||
+    "Informe um CPF válido (formato 000.000.000-00).",
   label: () => "",
   cep: (value) =>
     normalizeDigits(value).length === 8 || "Informe um CEP válido com 8 dígitos.",
@@ -73,6 +81,8 @@ const VALIDATORS = {
 const state = {
   section: "overview",
   editingAddressId: null,
+  apiUser: null,
+  runtimeProfile: null,
 };
 
 /* Leitura/escrita segura no localStorage (mesmo padrão do store). */
@@ -103,18 +113,32 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-/* Sessão válida: aponta para um usuário que existe de fato em "nexus:user"
-   (getAuthUser já valida a correspondência entre sessão e usuário). Retorna
-   o userId da sessão ou null quando não há sessão válida. */
+/* Identidade usada para filtrar dados locais (endereços, preferências,
+   pedidos): sessão mock (mock) ou apiUser.id (api — fonte de verdade). */
 function currentUserId() {
+  if (isStorefrontAuthApiEnabled()) {
+    return state.apiUser && state.apiUser.id ? String(state.apiUser.id) : null;
+  }
   const session = getSession();
   if (!session || !String(session.userId)) return null;
   return getAuthUser() ? String(session.userId) : null;
 }
 
 /* Dados exibidos: vêm do usuário da sessão quando autenticado; caso
-   contrário, mantém o perfil local (v1.9) — NUNCA os dados do usuário. */
+   contrário, mantém o perfil local (v1.9) — NUNCA os dados do usuário.
+   No modo api: name/email de /me, phone/cpf de /profile. */
 function getDisplayProfile() {
+  if (isStorefrontAuthApiEnabled()) {
+    const user = state.apiUser || {};
+    const profile = state.runtimeProfile || {};
+    return {
+      name: user.name || "",
+      email: user.email || "",
+      phone: profile.phone || "",
+      cpf: profile.cpf || "",
+      createdAt: profile.createdAt || "",
+    };
+  }
   const user = getAuthUser();
   if (user) {
     return {
@@ -133,7 +157,27 @@ function saveProfile(data) {
     name: data.name || "",
     email: normalizeEmail(data.email),
     phone: data.phone || "",
+    cpf: data.cpf || "",
   });
+}
+
+/* Complemento mock: updateStoredUser preserva o cpf por design; persiste a
+   alteração do cpf do usuário da sessão (apenas o campo novo deste arquivo). */
+function updateStoredUserCpf(cpf) {
+  try {
+    const raw = window.localStorage.getItem("nexus:user");
+    if (!raw) return false;
+    const user = JSON.parse(raw);
+    if (!user || typeof user !== "object") return false;
+    if (String(user.cpf || "").replace(/\D/g, "") === String(cpf || "").replace(/\D/g, "")) {
+      return false;
+    }
+    user.cpf = String(cpf || "").trim();
+    window.localStorage.setItem("nexus:user", JSON.stringify(user));
+    return true;
+  } catch (err) {
+    return false;
+  }
 }
 
 function getAddresses() {
@@ -186,17 +230,43 @@ function normalizeDigits(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+/* CPF — algoritmo oficial dos dígitos verificadores (espelha o cadastro). */
+function isValidCpf(value) {
+  const digits = String(value).replace(/\D/g, "");
+  if (digits.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(digits)) return false;
+  if (digits === "12345678909") return false;
+
+  let sum = 0;
+  for (let i = 0; i < 9; i += 1) sum += Number(digits[i]) * (10 - i);
+  let first = 11 - (sum % 11);
+  if (first >= 10) first = 0;
+  if (first !== Number(digits[9])) return false;
+
+  sum = 0;
+  for (let i = 0; i < 10; i += 1) sum += Number(digits[i]) * (11 - i);
+  let second = 11 - (sum % 11);
+  if (second >= 10) second = 0;
+  return second === Number(digits[10]);
+}
+
 function announce(message) {
   const status = document.getElementById("profile-status");
   if (status) status.textContent = message;
 }
 
-function showFeedback(id, message) {
+function showFeedback(id, message, type = "success") {
   const el = document.getElementById(id);
   if (!el) return;
   el.textContent = message;
   el.hidden = false;
-  el.classList.add("alert--success");
+  if (type === "warning") {
+    el.classList.add("alert--warning");
+    el.classList.remove("alert--success");
+  } else {
+    el.classList.add("alert--success");
+    el.classList.remove("alert--warning");
+  }
   announce(message);
 }
 
@@ -337,10 +407,22 @@ function renderDados() {
   const name = field("pf-name");
   const email = field("pf-email");
   const phone = field("pf-phone");
+  const cpf = field("pf-cpf");
 
   if (name) name.value = profile.name || "";
   if (email) email.value = profile.email || "";
   if (phone) phone.value = profile.phone || "";
+  if (cpf) cpf.value = profile.cpf || "";
+
+  // No modo api, nome/e-mail vêm da conta (/me) e não são editáveis aqui.
+  const apiMode = isStorefrontAuthApiEnabled();
+  const setDisabled = (el) => {
+    if (!el) return;
+    if (apiMode) el.setAttribute("disabled", "");
+    else el.removeAttribute("disabled");
+  };
+  setDisabled(name);
+  setDisabled(email);
 
   document.querySelectorAll("#profile-form [data-validate]").forEach((el) => {
     clearFieldError(el);
@@ -349,7 +431,7 @@ function renderDados() {
   if (feedback) {
     feedback.hidden = true;
     feedback.textContent = "";
-    feedback.classList.remove("alert--success");
+    feedback.classList.remove("alert--success", "alert--warning");
   }
 }
 
@@ -402,7 +484,7 @@ function validateGroup(container) {
    DADOS PESSOAIS — salvar
 -------------------------------------------------------------------------- */
 
-function handleProfileSubmit(event) {
+async function handleProfileSubmit(event) {
   event.preventDefault();
 
   const form = document.getElementById("profile-form");
@@ -414,7 +496,7 @@ function handleProfileSubmit(event) {
     if (feedback) {
       feedback.hidden = true;
       feedback.textContent = "";
-      feedback.classList.remove("alert--success");
+      feedback.classList.remove("alert--success", "alert--warning");
     }
     announce("Revise os campos destacados antes de salvar.");
     return;
@@ -424,18 +506,123 @@ function handleProfileSubmit(event) {
     name: document.getElementById("pf-name").value.trim(),
     email: normalizeEmail(document.getElementById("pf-email").value),
     phone: document.getElementById("pf-phone").value.trim(),
+    cpf: document.getElementById("pf-cpf").value.trim(),
   };
 
+  if (isStorefrontAuthApiEnabled()) {
+    await submitProfileApi(data);
+    return;
+  }
+
   if (getAuthUser()) {
-    // Autenticado: atualiza SOMENTE o usuário da sessão (preserva id e
-    // createdAt no updateStoredUser) — não cria um novo usuário nem grava
-    // um perfil separado.
+    // Autenticado (mock): atualiza SOMENTE o usuário da sessão (preserva id e
+    // createdAt no updateStoredUser) — não cria um novo usuário nem grava um
+    // perfil separado. O cpf é persistido pelo complemento deste arquivo.
     updateStoredUser(data);
+    updateStoredUserCpf(data.cpf);
   } else {
     // Sem sessão: modo legado v1.9 (perfil local), que não é o usuário.
     saveProfile(data);
   }
   showFeedback("profile-feedback", "Dados salvos com sucesso!");
+}
+
+/* --------------------------------------------------------------------------
+   API — PATCH envia SOMENTE phone/cpf; valores normalizados vêm do servidor
+-------------------------------------------------------------------------- */
+
+async function submitProfileApi(data) {
+  const feedback = document.getElementById("profile-feedback");
+  const payload = {};
+  if (data.phone !== "") payload.phone = data.phone;
+  if (data.cpf !== "") payload.cpf = data.cpf;
+
+  if (Object.keys(payload).length === 0) {
+    const phone = document.getElementById("pf-phone");
+    if (phone) phone.focus();
+    announce("Informe ao menos o telefone ou o CPF para salvar.");
+    return;
+  }
+
+  const submit = document.getElementById("pf-submit");
+  if (submit) submit.disabled = true;
+  try {
+    const profile = await userApi.updateProfile(payload);
+    state.runtimeProfile = {
+      phone: (profile && profile.phone) || "",
+      cpf: (profile && profile.cpf) || "",
+      createdAt: (state.runtimeProfile && state.runtimeProfile.createdAt) || "",
+      updatedAt: (profile && profile.updatedAt) || "",
+    };
+    const phoneEl = document.getElementById("pf-phone");
+    if (phoneEl && profile && profile.phone != null) {
+      phoneEl.value = String(profile.phone);
+    }
+    const cpfEl = document.getElementById("pf-cpf");
+    if (cpfEl && profile && profile.cpf != null) {
+      cpfEl.value = String(profile.cpf);
+    }
+    showFeedback("profile-feedback", "Dados salvos com sucesso!");
+  } catch (err) {
+    showProfileError(err, feedback);
+  } finally {
+    if (submit) submit.disabled = false;
+  }
+}
+
+/* Mapa de erros sem alert(): mensagens seguras; associa ao campo quando
+   possível; 401 devolve a página ao estado "convite" (sessão expirada). */
+function showProfileError(err, feedback) {
+  const status = err && err.status;
+  let message;
+  if (!status || status === 0) {
+    message = "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.";
+  } else if (status === 401) {
+    message = "Sua sessão expirou. Entre novamente para continuar.";
+  } else if (status === 409) {
+    message = "CPF já cadastrado para outro usuário.";
+  } else if (status === 429) {
+    message = "Muitas tentativas. Tente novamente mais tarde.";
+  } else if (status >= 500) {
+    message = "Ocorreu um erro inesperado no servidor. Tente novamente em instantes.";
+  } else if (err && typeof err.message === "string" && err.message !== "") {
+    message = err.message;
+  } else {
+    message = "Não foi possível salvar os dados. Revise e tente novamente.";
+  }
+
+  if (feedback) {
+    feedback.textContent = message;
+    feedback.hidden = false;
+    feedback.classList.add("alert--warning");
+    feedback.classList.remove("alert--success");
+    announce(message);
+  }
+
+  if (status === 401) {
+    state.apiUser = null;
+    state.runtimeProfile = null;
+    applyAuthUi(null);
+    return;
+  }
+
+  const lower = String(message).toLowerCase();
+  const cpfField = document.getElementById("pf-cpf");
+  const phoneField = document.getElementById("pf-phone");
+  if (status === 409 && cpfField) {
+    setFieldError(cpfField, message);
+    cpfField.focus();
+    return;
+  }
+  if (cpfField && lower.includes("cpf")) {
+    setFieldError(cpfField, message);
+    cpfField.focus();
+    return;
+  }
+  if (phoneField && (lower.includes("telefone") || lower.includes("phone"))) {
+    setFieldError(phoneField, message);
+    phoneField.focus();
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -1131,21 +1318,48 @@ function bindEvents() {
   window.addEventListener("hashchange", handleHashChange);
 }
 
-function init() {
-  const section = sectionFromHash();
-  state.section = section;
-
-  const authUser = getAuthUser();
+/* Saudação + convite: usuário da sessão mock ou apiUser (api). */
+function applyAuthUi(user) {
   const greeting = document.getElementById("profile-greeting");
   const authBox = document.getElementById("profile-auth");
-
-  if (authUser) {
-    const firstName = String(authUser.name || "").trim().split(/\s+/)[0] || "";
+  if (user && user.id) {
+    const firstName = String(user.name || "").trim().split(/\s+/)[0] || "";
     if (greeting) greeting.textContent = firstName;
     if (authBox) authBox.hidden = true;
   } else {
     if (greeting) greeting.textContent = "visitante";
     if (authBox) authBox.hidden = false;
+  }
+}
+
+/* API: identidade real vem do auth.js (authReady + /me); o perfil (phone/cpf)
+   vem de /profile. getAuthUser() NÃO é usado no modo api. */
+async function bootApi() {
+  const user = await authReady().catch(() => null);
+  state.apiUser = user && user.id ? user : null;
+  applyAuthUi(state.apiUser);
+
+  if (state.apiUser) {
+    try {
+      state.runtimeProfile = await userApi.getProfile();
+    } catch (err) {
+      state.runtimeProfile = null;
+      if (err && err.status === 401) {
+        state.apiUser = null;
+        applyAuthUi(null);
+      }
+    }
+  }
+}
+
+async function init() {
+  const section = sectionFromHash();
+  state.section = section;
+
+  if (isStorefrontAuthApiEnabled()) {
+    await bootApi();
+  } else {
+    applyAuthUi(getAuthUser());
   }
 
   for (const item of SECTIONS) {
