@@ -26,11 +26,22 @@
    - pagamento guardado apenas como { method } (sem cartão/CVV/credenciais);
    - o botão de finalização é travado durante o processamento e a confirmação
      da sessão impede duplicação por duplo clique, Enter repetido ou reload.
+
+   v3 — FASE 9-D (modo api):
+   - quando NEXUS_STOREFRONT_AUTH="api", a confirmação chama POST /api/orders
+     (user-api.js) e usa SOMENTE os valores retornados pelo backend; o payload
+     leva itens, entrega, pagamento, endereço e uma chave de idempotência —
+     NUNCA preço/subtotal/total/estoque;
+   - a sessão é aguardada via authReady() (refresh httpOnly -> /me);
+   - o carrinho/estado só são limpos após sucesso 201 (ou replay 200);
+   - modo mock permanece intacto quando isStorefrontAuthApiEnabled() === false.
    ========================================================================== */
 
 import { formatBRL } from "../../utils/format.js";
-import { getAuthUser } from "../auth/auth.js";
+import { getAuthUser, authReady } from "../auth/auth.js";
 import { clearCart, syncHeaderCounts } from "../store/store.js";
+import { isStorefrontAuthApiEnabled } from "../../utils/config.js";
+import userApi from "../../utils/user-api.js";
 import {
   calculateSubtotal,
   EXPRESS_CENTS,
@@ -42,6 +53,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const SEQUENCE_KEY = "nexus:checkout:seq"; // contador simples e não sensível
 const CONFIRM_KEY = "nexus:checkout:last-order"; // confirmação da sessão
 const ORDERS_KEY = "nexus:orders"; // pedidos mock persistidos (array de pedidos)
+const IDEM_KEY = "nexus:checkout:idem"; // chave de idempotência da confirmação (sessão)
+const IDEM_PREFIX = "chk-";
 const ORDER_PREFIX = "NT-";
 
 const DELIVERY_LABELS = {
@@ -476,6 +489,104 @@ function buildOrder(user) {
   };
 }
 
+/* --------------------------------------------------------------------------
+   IDEMPOTÊNCIA (modo api) — UMA chave por tentativa lógica de confirmação
+   A chave nasce da "impressão digital" do pedido (itens + entrega + forma de
+   pagamento + endereço). Repetir a MESMA confirmação (erro de rede, reload,
+   duplo submit) reutiliza a MESMA chave; o backend (UNIQUE user+key) devolve
+   replay 200 com o pedido original em vez de duplicar. Pedidos diferentes
+   (carrinho/opções alteradas) geram chaves distintas, e a chave é limpa após
+   o sucesso (nova compra => nova chave). A chave nunca contém dados
+   sensíveis; a garantia definitiva é a UNIQUE do MySQL, não o storage.
+-------------------------------------------------------------------------- */
+
+function getCheckoutField(id) {
+  const el = document.getElementById(id);
+  return el ? String(el.value || "").trim() : "";
+}
+
+/* Foto não sensível do pedido para decidir entre reutilizar ou gerar chave. */
+function checkoutFingerprint() {
+  const items = [...state.items.entries()]
+    .map(([id, { qty }]) => `${id}:${qty}`)
+    .sort()
+    .join(",");
+  return [
+    items,
+    state.delivery,
+    state.payment,
+    getCheckoutField("co-name").toLowerCase(),
+    getCheckoutField("co-email").toLowerCase(),
+    getCheckoutField("co-cep"),
+    getCheckoutField("co-street").toLowerCase(),
+    getCheckoutField("co-number"),
+    getCheckoutField("co-complement").toLowerCase(),
+    getCheckoutField("co-neighborhood").toLowerCase(),
+    getCheckoutField("co-city").toLowerCase(),
+    getCheckoutField("co-state"),
+  ].join("||");
+}
+
+function readIdemEntry() {
+  return readJSON(IDEM_KEY, window.sessionStorage);
+}
+
+function saveIdemEntry(entry) {
+  return writeJSON(IDEM_KEY, entry, window.sessionStorage);
+}
+
+function generateIdempotencyKey() {
+  const nonce =
+    Date.now().toString(36) +
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 10);
+  return (IDEM_PREFIX + nonce).slice(0, 64);
+}
+
+function idempotencyKey() {
+  const fp = checkoutFingerprint();
+  const entry = readIdemEntry();
+  if (
+    entry &&
+    entry.fp === fp &&
+    typeof entry.key === "string" &&
+    entry.key !== "" &&
+    entry.key.length <= 64
+  ) {
+    return entry.key; // mesma tentativa em andamento -> mesma chave
+  }
+  const key = generateIdempotencyKey();
+  saveIdemEntry({ fp, key });
+  return key;
+}
+
+/* Payload real (modo api): SOMENTE ids e quantidades. Preço, subtotal, total e
+   estoque NÃO são enviados — o backend é a autoridade. */
+function buildCreateOrderPayload() {
+  const items = [...state.items.entries()].map(([id, { qty }]) => ({
+    productId: Number(id),
+    quantity: Number(qty),
+  }));
+
+  return {
+    items,
+    deliveryMethod: state.delivery,
+    paymentMethod: state.payment,
+    address: {
+      name: getCheckoutField("co-name"),
+      email: getCheckoutField("co-email").toLowerCase(),
+      cep: getCheckoutField("co-cep"),
+      street: getCheckoutField("co-street"),
+      number: getCheckoutField("co-number"),
+      complement: getCheckoutField("co-complement") || null,
+      neighborhood: getCheckoutField("co-neighborhood"),
+      city: getCheckoutField("co-city"),
+      state: getCheckoutField("co-state"),
+    },
+    idempotencyKey: idempotencyKey(),
+  };
+}
+
 /* Sem sessão válida: NÃO cria pedido, NÃO avança a sequência e NÃO limpa o
    carrinho. Mensagem acessível () e ação para entrar em login.html. */
 function showAuthRequired() {
@@ -490,6 +601,16 @@ function showAuthRequired() {
 
 function finishOrder() {
   if (state.locked) return; // duplo clique / Enter repetido / handler repetido
+
+  if (isStorefrontAuthApiEnabled()) {
+    finishOrderApi();
+    return;
+  }
+  finishOrderMock();
+}
+
+function finishOrderMock() {
+  if (state.locked) return;
 
   const user = getAuthUser();
   if (!user) {
@@ -533,6 +654,112 @@ function finishOrder() {
   showSuccess(confirm);
 }
 
+/* Confirmação REAL (modo api). A ordem de operações é rígida: aguarda a
+   sessão (authReady), monta o payload SEM preços, envia, usa os valores do
+   backend, e só então limpa o carrinho/estado — nunca antes do sucesso. */
+async function finishOrderApi() {
+  let user = null;
+  try {
+    user = await authReady(); // refresh httpOnly -> /me (nunca o storage mock)
+  } catch (err) {
+    user = null;
+  }
+  if (!user || !user.id) {
+    showAuthRequired();
+    return;
+  }
+  if (state.locked) return; // outra tentativa já iniciada enquanto aguardávamos
+
+  state.locked = true;
+  const submitBtn = document.getElementById("co-submit");
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const payload = buildCreateOrderPayload();
+    const data = await userApi.createOrder(payload);
+    const order = data && data.order;
+    if (
+      !order ||
+      typeof order.code !== "string" ||
+      order.code === "" ||
+      typeof order.totalCents !== "number"
+    ) {
+      throw new Error("Resposta de pedido inválida.");
+    }
+
+    const confirm = {
+      id: order.code, // código REAL do backend (NT-...) exibido ao cliente
+      createdAt: order.createdAt || new Date().toISOString(),
+      totalCents: order.totalCents,
+      itemCount: Number(order.itemCount) || 0,
+      delivery: {
+        method: order.deliveryMethod,
+        label: order.deliveryLabel || order.deliveryMethod,
+      },
+      payment: {
+        method: order.paymentMethod,
+        label: order.paymentLabel || order.paymentMethod,
+      },
+      api: true,
+    };
+
+    try {
+      sessionStorage.setItem(CONFIRM_KEY, JSON.stringify(confirm));
+    } catch (err) {
+      // sessão indisponível — confirmação apenas em memória
+    }
+    try {
+      sessionStorage.removeItem(IDEM_KEY); // pedido concluído -> nova compra gera nova chave
+    } catch (err) {
+      // storage indisponível — segue normalmente
+    }
+
+    clearCart(); // SÓ após sucesso confirmado no servidor (201 ou replay 200)
+    syncHeaderCounts();
+    showSuccess(confirm);
+  } catch (err) {
+    state.locked = false;
+    if (submitBtn) submitBtn.disabled = false;
+    handleApiOrderError(err);
+  }
+}
+
+/* Erros da API em mensagens amigáveis (nunca SQL/stack). NENHUM caminho
+   limpa o carrinho aqui — o pedido só é concluído com resposta 200/201. */
+function handleApiOrderError(err) {
+  const status = err && err.status ? Number(err.status) : 0;
+  const message = (err && String(err.message)) || "";
+
+  if (status === 401) {
+    showAuthRequired();
+    announce(
+      "Sua sessão expirou. Entre novamente para concluir o pedido. Seu carrinho foi preservado.",
+    );
+    return;
+  }
+  if (status === 403) {
+    announce("Não foi possível concluir o pedido: sua conta está inativa.");
+    return;
+  }
+  if (status === 409) {
+    announce(
+      /estoque/i.test(message)
+        ? "Um ou mais produtos ficaram sem estoque. Seu carrinho foi preservado para revisão."
+        : "Não foi possível concluir o pedido. Tente novamente.",
+    );
+    return;
+  }
+  if (status === 400) {
+    announce("Não foi possível validar o pedido. Revise os dados informados.");
+    return;
+  }
+  if (status === 0) {
+    announce("Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.");
+    return;
+  }
+  announce("Ocorreu um erro inesperado ao finalizar o pedido. Tente novamente em instantes.");
+}
+
 function showSuccess(saved) {
   toggleViews("success");
   document.getElementById("success-order").textContent = saved.id;
@@ -544,7 +771,9 @@ function showSuccess(saved) {
     )}`;
     if (saved.payment && saved.payment.label) text += ` · ${saved.payment.label}`;
     if (saved.delivery && saved.delivery.label) text += ` · ${saved.delivery.label}`;
-    text += ". Simulação: nenhum pedido real foi criado.";
+    text += saved.api
+      ? " · Pedido real confirmado e registrado na sua conta."
+      : ". Simulação: nenhum pedido real foi criado.";
     meta.textContent = text;
   }
   document.getElementById("success-title").focus();

@@ -18,6 +18,7 @@ const adminBrandsRouter = require("./routes/admin/brands.routes");
 const adminCategoriesRouter = require("./routes/admin/categories.routes");
 const adminDashboardRouter = require("./routes/admin/dashboard.routes");
 const userAuthRouter = require("./routes/user/auth.routes");
+const ordersRouter = require("./routes/orders.routes");
 const productsController = require("./controllers/products.controller");
 const { requireAdmin } = require("./middlewares/requireAdmin");
 const { adminApiLimiter, userApiLimiter } = require("./middlewares/rateLimit");
@@ -56,6 +57,7 @@ app.get("/api/brands", productsController.brands);
 
 /* --- Usuário --- */
 app.use("/api/auth", userApiLimiter, userAuthRouter);
+app.use("/api/orders", userApiLimiter, ordersRouter);
 
 /* --- Admin --- */
 app.use("/api/admin/auth", adminApiLimiter, adminAuthRouter);

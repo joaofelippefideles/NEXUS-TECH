@@ -134,9 +134,10 @@ async function request(path, options = {}) {
   const method = options.method || "GET";
   const hasBody = options.body !== undefined;
   const hadToken = Boolean(state.accessToken);
+  const base = options.baseURL || state.baseURL;
 
   const doFetch = () =>
-    safeFetch(join(state.baseURL, path), {
+    safeFetch(join(base, path), {
       method,
       headers: buildHeaders(hasBody),
       credentials: "include",
@@ -266,6 +267,35 @@ async function updateProfile({ phone, cpf } = {}) {
 }
 
 /* --------------------------------------------------------------------------
+   PEDIDOS — consumidor da FASE 9-C (POST/GET /api/orders)
+   Reutiliza o MESMO núcleo `request` de autenticação: access token em memória
+   + retry em 401 com rotação de refresh + credentials include. Nenhum dado de
+   cartão/CVV, estoque ou valor calculado no frontend é enviado ou armazenado.
+   A authority (preço, frete, subtotal, total) é sempre o backend.
+-------------------------------------------------------------------------- */
+
+const ORDERS_BASE = "/api/orders";
+
+async function createOrder(payload = {}) {
+  const data = await apiRequest("", {
+    baseURL: ORDERS_BASE,
+    method: "POST",
+    body: payload,
+  });
+  return data || {};
+}
+
+async function listOrders() {
+  const data = await apiRequest("", { baseURL: ORDERS_BASE });
+  return data || {};
+}
+
+async function getOrder(id) {
+  const data = await apiRequest("/" + String(id), { baseURL: ORDERS_BASE });
+  return data || {};
+}
+
+/* --------------------------------------------------------------------------
    CONFIGURAÇÃO / ESTADO
 -------------------------------------------------------------------------- */
 
@@ -306,6 +336,9 @@ const userApi = {
   changePassword,
   getProfile,
   updateProfile,
+  createOrder,
+  listOrders,
+  getOrder,
 };
 
 export {
@@ -322,6 +355,9 @@ export {
   changePassword,
   getProfile,
   updateProfile,
+  createOrder,
+  listOrders,
+  getOrder,
   ApiError,
 };
 

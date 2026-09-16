@@ -23,6 +23,19 @@
      dados sensíveis (método de entrega/pagamento apenas).
    - cards de visão geral e pedidos refletem a quantidade real do usuário.
 
+   v2.5 — Pedidos reais (modo api):
+   - no modo api, "Meus pedidos" lista GET /api/orders e o detalhe usa
+     GET /api/orders/:id (mesmos userApi.listOrders/getOrder do checkout).
+     NUNCA lê "nexus:orders" no modo api (nenhum mock misturado);
+   - listagem com estados loading / vazio / erro (com retry) / carregada;
+     o código (NT-...) é exibido; subtotal/frete/total, entrega e pagamento
+     vêm do backend (nunca recalculados pelo frontend);
+   - detalhe carregado sob demanda com preços HISTÓRICOS (order_items) e
+     snapshot do endereço de entrega; pedido de outro usuário -> 404 -> a
+     API é a autoridade e o frontend exibe "Pedido não encontrado" (sem
+     consultar storage como substituto);
+   - mock preservado intacto (v2.4) — apenas o modo api mudou.
+
    NENHUMA senha é persistida ou exibida. No modo mock, nenhuma requisição ao
    servidor (o projeto é simulado); no modo api (config.js), a identidade vem
    de /me (authReady) e phone/cpf de GET/PATCH /api/auth/profile — name/email
@@ -83,6 +96,13 @@ const state = {
   editingAddressId: null,
   apiUser: null,
   runtimeProfile: null,
+  /* Pedidos (modo api): cache da lista + estados da renderização. Em mock,
+     os pedidos continuam vindo de "nexus:orders" (v2.4), nunca daqui. */
+  orders: null, // array do backend quando carregado; null = ainda não carregado
+  ordersState: "idle", // "idle" | "loading" | "ok" | "error"
+  ordersError: null, // status HTTP do erro (0 = falha de rede)
+  ordersRequestId: 0, // guard contra corrida de fetches (listagem + retry)
+  details: new Map(), // cache de detalhes (modo api): id -> pedido normalizado
 };
 
 /* Leitura/escrita segura no localStorage (mesmo padrão do store). */
@@ -356,6 +376,16 @@ function renderOverview() {
   const addresses = addressesForCurrentUser();
   const profile = getDisplayProfile();
   const orders = ordersForCurrentUser();
+
+  /* Modo api: o contador de pedidos só existe depois de GET /api/orders.
+     Dispara o 1º carregamento aqui, mas o card NUNCA lê nexus:orders. */
+  if (
+    isStorefrontAuthApiEnabled() &&
+    currentUserId() &&
+    state.ordersState === "idle"
+  ) {
+    loadOrders();
+  }
 
   const fav = document.getElementById("ov-favoritos");
   if (fav) fav.textContent = String(favorites.length);
@@ -973,10 +1003,15 @@ function readOrders() {
 }
 
 /* Lista do usuário autenticado. Sem sessão válida → [] (nenhum pedido é
-   exibido). Com sessão, apenas os pedidos cujo userId bate com o da sessão. */
+   exibido). Com sessão, apenas os pedidos cujo userId bate com o da sessão.
+   Modo api: a lista vem EXCLUSIVAMENTE do cache de GET /api/orders — o mock
+   "nexus:orders" é ignorado (nada de pedido simulado misturado com real). */
 function ordersForCurrentUser() {
   const userId = currentUserId();
   if (!userId) return [];
+  if (isStorefrontAuthApiEnabled()) {
+    return Array.isArray(state.orders) ? state.orders : [];
+  }
   return readOrders().filter(
     (order) => order && String(order.userId) === String(userId),
   );
@@ -1031,18 +1066,32 @@ function moneyText(cents) {
   return typeof cents === "number" ? formatBRL(cents) : "—";
 }
 
+/* Método de entrega: aceita o shape mock (delivery.label) e o da API real
+   (deliveryLabel no topo do pedido). Nada de dados sensíveis no texto. */
 function deliveryText(order) {
   const delivery = order && order.delivery;
   if (delivery && delivery.label) return delivery.label;
   if (delivery && delivery.method) return delivery.method;
+  if (order && order.deliveryLabel) return order.deliveryLabel;
+  if (order && order.deliveryMethod) return order.deliveryMethod;
   return "Informação indisponível";
 }
 
+/* Método de pagamento: mesmo fallback duplo (mock => detalhe da API). */
 function paymentText(order) {
   const payment = order && order.payment;
   if (payment && payment.label) return payment.label;
   if (payment && payment.method) return payment.method;
+  if (order && order.paymentLabel) return order.paymentLabel;
+  if (order && order.paymentMethod) return order.paymentMethod;
   return "Informação indisponível";
+}
+
+/* Código exibido no título do card. Mock: o próprio id (NT-000001, v2.4
+   preservada). API: o código REAL do backend (code = NT-xxxxxxxxxx). */
+function orderCodeText(order) {
+  const code = order && order.code;
+  return String(code || (order && order.id) || "");
 }
 
 /* ID seguro para usar em id/atributos do DOM (normaliza o id do pedido e
@@ -1056,30 +1105,221 @@ function renderPedidos() {
   const list = document.getElementById("pedidos-list");
   const empty = document.getElementById("pedidos-empty");
   const authRequired = document.getElementById("pedidos-auth-required");
+  const loading = document.getElementById("pedidos-loading");
+  const error = document.getElementById("pedidos-error");
   if (!list || !empty || !authRequired) return;
 
   const userId = currentUserId();
 
   // Sem sessão válida: nenhum pedido é exibido; pede login.
   if (!userId) {
+    // Modo api: o texto do convite é sobre a conta real (não "simulados").
+    if (isStorefrontAuthApiEnabled()) {
+      const authText = authRequired.querySelector(".cart-empty__text");
+      if (authText) {
+        authText.textContent =
+          "Seus pedidos ficam vinculados à sua conta. Faça login para visualizar o histórico.";
+      }
+    }
     authRequired.hidden = false;
     empty.hidden = true;
     list.hidden = true;
     list.replaceChildren();
+    if (loading) loading.hidden = true;
+    if (error) error.hidden = true;
     return;
   }
 
+  if (isStorefrontAuthApiEnabled()) {
+    renderPedidosApi(list, empty, authRequired, loading, error);
+    return;
+  }
+
+  authRequired.hidden = true;
+  if (loading) loading.hidden = true;
+  if (error) error.hidden = true;
   const orders = ordersForCurrentUser().sort(
     (a, b) => orderTimestamp(b) - orderTimestamp(a),
   );
 
-  authRequired.hidden = true;
   const emptyVisible = orders.length === 0;
   empty.hidden = !emptyVisible;
   list.hidden = emptyVisible;
   list.replaceChildren();
 
   for (const order of orders) list.appendChild(renderOrderCard(order));
+}
+
+/* Modo api — estados da listagem baseados no cache/state (a API é a única
+   fonte; "nexus:orders" nunca participa aqui). */
+function renderPedidosApi(list, empty, authRequired, loading, error) {
+  authRequired.hidden = true;
+  if (error) error.hidden = true;
+  if (loading) loading.hidden = true;
+  list.hidden = false;
+  list.replaceChildren();
+
+  if (state.ordersState === "ok") {
+    const orders = ordersForCurrentUser();
+    const emptyVisible = orders.length === 0;
+    empty.hidden = !emptyVisible;
+    list.hidden = emptyVisible;
+    for (const order of orders) list.appendChild(renderOrderCard(order));
+    return;
+  }
+
+  empty.hidden = true;
+  list.hidden = true;
+
+  if (state.ordersState === "loading") {
+    if (loading) loading.hidden = false;
+    return;
+  }
+
+  if (state.ordersState === "error") {
+    if (error) {
+      const text = document.getElementById("pedidos-error-text");
+      if (text) text.textContent = ordersErrorLabel(state.ordersError);
+      error.hidden = false;
+    }
+    return;
+  }
+
+  // "idle": primeiro carregamento (ou retry) — dispara GET /api/orders.
+  state.ordersState = "loading";
+  if (loading) loading.hidden = false;
+  loadOrders();
+}
+
+function ordersErrorLabel(status) {
+  if (status === 403) {
+    return "Sua conta está inativa, por isso não foi possível carregar seus pedidos.";
+  }
+  return "Não foi possível carregar seus pedidos no momento.";
+}
+
+/* GET /api/orders com estados (loading/ok/error) e retry. Concorrência:
+   cada chamada tem um id próprio; resposta antiga não sobrescreve a nova. */
+async function loadOrders() {
+  const requestId = ++state.ordersRequestId;
+  try {
+    const data = await userApi.listOrders();
+    if (requestId !== state.ordersRequestId) return;
+    state.orders = Array.isArray(data && data.orders) ? data.orders : [];
+    state.ordersState = "ok";
+    state.ordersError = null;
+    renderPedidos();
+    renderOverview();
+    const count = state.orders.length;
+    announce(
+      count === 0
+        ? "Você ainda não possui pedidos."
+        : `${count} ${count === 1 ? "pedido carregado" : "pedidos carregados"}.`,
+    );
+  } catch (err) {
+    if (requestId !== state.ordersRequestId) return;
+    // 401: sessão expirada/inválida -> convite (nunca mock como substituto).
+    if (err && err.status === 401) {
+      state.apiUser = null;
+      state.orders = [];
+      state.ordersState = "ok";
+      state.ordersError = null;
+      applyAuthUi(null);
+      renderPedidos();
+      renderOverview();
+      announce("Sua sessão expirou. Entre novamente para continuar.");
+      return;
+    }
+    state.ordersState = "error";
+    state.ordersError = err && typeof err.status === "number" ? err.status : 0;
+    renderPedidos();
+    announce("Não foi possível carregar seus pedidos no momento.");
+  }
+}
+
+/* Normaliza o pedido da API para o shape interno de renderização (o mock
+   v2.4 continua como está — apenas o modo api passa por aqui). */
+function normalizeApiOrder(order, items) {
+  return {
+    id: order && order.id,
+    code: order && order.code,
+    status: order && order.status,
+    subtotalCents: order && order.subtotalCents,
+    shippingCents: order && order.shippingCents,
+    totalCents: order && order.totalCents,
+    itemCount: order && order.itemCount,
+    delivery: {
+      method: (order && order.deliveryMethod) || "",
+      label: (order && order.deliveryLabel) || order && order.deliveryMethod || "",
+    },
+    payment: {
+      method: (order && order.paymentMethod) || "",
+      label: (order && order.paymentLabel) || order && order.paymentMethod || "",
+    },
+    deliveryName: (order && order.deliveryName) || "",
+    deliveryEmail: (order && order.deliveryEmail) || "",
+    address: (order && order.address) || {},
+    createdAt: (order && order.createdAt) || "",
+    items: Array.isArray(items)
+      ? items.map((item) => ({
+          name: (item && item.productName) || "Produto",
+          quantity: Number(item && item.quantity) || 0,
+          unitPriceCents: item && item.unitPriceCents,
+          totalCents: item && item.totalCents,
+        }))
+      : [],
+  };
+}
+
+/* Detalhe sob demanda (modo api). Endereço snapshot + preços HISTÓRICOS de
+   order_items vêm exclusivamente de GET /api/orders/:id. */
+async function openOrderDetailsApi(id, details, toggle) {
+  details.replaceChildren();
+  const statusEl = document.createElement("p");
+  statusEl.className = "pedido-details__status";
+  statusEl.setAttribute("role", "status");
+  statusEl.textContent = "Carregando detalhes...";
+  details.appendChild(statusEl);
+  details.hidden = false;
+  toggle.setAttribute("aria-expanded", "true");
+  announce(`Carregando detalhes do pedido ${id}.`);
+
+  try {
+    if (!state.details.has(String(id))) {
+      const data = await userApi.getOrder(id);
+      state.details.set(
+        String(id),
+        normalizeApiOrder(data && data.order, data && data.items),
+      );
+    }
+    if (!isOrderDetailsOpen(id)) return;
+    details.replaceChildren();
+    appendOrderDetails(details, state.details.get(String(id)), {
+      withAddress: true,
+    });
+    announce(`Detalhes do pedido ${id} abertos.`);
+  } catch (err) {
+    if (!isOrderDetailsOpen(id)) return;
+    details.replaceChildren();
+    const msg = document.createElement("p");
+    msg.className = "pedido-details__status";
+    if (err && err.status === 404) {
+      // A API é a autoridade: pedido inexistente/alheio nunca é substituído
+      // por dados locais ("nexus:orders" não é consultado).
+      msg.textContent = "Pedido não encontrado.";
+      announce("Pedido não encontrado.");
+    } else {
+      msg.textContent =
+        "Não foi possível carregar os detalhes do pedido. Tente novamente.";
+      announce("Não foi possível carregar os detalhes do pedido.");
+    }
+    details.appendChild(msg);
+  }
+}
+
+function isOrderDetailsOpen(id) {
+  const btn = document.getElementById(orderDomId(id) + "-btn");
+  return Boolean(btn) && btn.getAttribute("aria-expanded") === "true";
 }
 
 function renderOrderCard(order) {
@@ -1091,7 +1331,7 @@ function renderOrderCard(order) {
 
   const title = document.createElement("h3");
   title.className = "pedido__number";
-  title.textContent = `Pedido ${order.id}`;
+  title.textContent = `Pedido ${orderCodeText(order)}`;
 
   const status = document.createElement("span");
   status.className = "pedido__status";
@@ -1103,9 +1343,21 @@ function renderOrderCard(order) {
   const count = orderItemCount(order);
   const meta = document.createElement("p");
   meta.className = "pedido__meta";
-  meta.textContent =
-    `${orderDateText(order)} · ${count} ${count === 1 ? "item" : "itens"}` +
-    ` · ${moneyText(orderTotalCents(order))} · ${deliveryText(order)}`;
+  if (isStorefrontAuthApiEnabled()) {
+    // Listagem vinda da API: subtotal/frete/total, entrega e pagamento são os
+    // valores do backend — nunca recalculados com o carrinho atual.
+    meta.textContent =
+      `${orderDateText(order)} · ${count} ${count === 1 ? "item" : "itens"}` +
+      ` · Subtotal ${moneyText(order.subtotalCents)}` +
+      ` · Frete ${moneyText(order.shippingCents)}` +
+      ` · Total ${moneyText(orderTotalCents(order))}` +
+      ` · ${deliveryText(order)} · ${paymentText(order)}`;
+  } else {
+    // Mock v2.4 preservado byte a byte.
+    meta.textContent =
+      `${orderDateText(order)} · ${count} ${count === 1 ? "item" : "itens"}` +
+      ` · ${moneyText(orderTotalCents(order))} · ${deliveryText(order)}`;
+  }
 
   const domId = orderDomId(order.id);
   const toggle = document.createElement("button");
@@ -1124,7 +1376,11 @@ function renderOrderCard(order) {
   details.hidden = true;
   details.setAttribute("role", "region");
   details.setAttribute("aria-labelledby", domId + "-btn");
-  appendOrderDetails(details, order);
+  // Modo api: os detalhes (itens + endereço snapshot) são buscados sob
+  // demanda em GET /api/orders/:id — não há itens no pedido da listagem.
+  if (!isStorefrontAuthApiEnabled()) {
+    appendOrderDetails(details, order);
+  }
 
   li.appendChild(head);
   li.appendChild(meta);
@@ -1133,7 +1389,7 @@ function renderOrderCard(order) {
   return li;
 }
 
-function appendOrderDetails(details, order) {
+function appendOrderDetails(details, order, opts = {}) {
   const itemsTitle = document.createElement("h4");
   itemsTitle.textContent = "Itens do pedido";
   details.appendChild(itemsTitle);
@@ -1190,6 +1446,27 @@ function appendOrderDetails(details, order) {
     ]),
   );
 
+  // Snapshot do endereço de ENTREGA gravado no pedido (modo api). Vem do
+  // banco — nunca do localStorage nem de um endereço salvo atual.
+  if (opts.withAddress && order && order.address) {
+    const addr = order.address || {};
+    const rows = [];
+    if (order.deliveryName) rows.push({ label: "Nome", value: order.deliveryName });
+    if (order.deliveryEmail) rows.push({ label: "E-mail", value: order.deliveryEmail });
+    if (addr.street) {
+      rows.push({ label: "Endereço", value: `${addr.street}, ${addr.number || ""}`.trim() });
+    }
+    if (addr.complement) rows.push({ label: "Complemento", value: addr.complement });
+    if (addr.neighborhood) rows.push({ label: "Bairro", value: addr.neighborhood });
+    if (addr.city && addr.state) rows.push({ label: "Cidade/UF", value: `${addr.city}/${addr.state}` });
+    if (addr.cep) rows.push({ label: "CEP", value: String(addr.cep) });
+
+    const addrTitle = document.createElement("h4");
+    addrTitle.textContent = "Endereço de entrega";
+    cols.appendChild(addrTitle);
+    cols.appendChild(buildSummary(rows));
+  }
+
   details.appendChild(cols);
 }
 
@@ -1224,6 +1501,19 @@ function handlePedidosClick(event) {
 
   const details = document.getElementById(orderDomId(order.id) + "-details");
   if (!details) return;
+
+  // Modo api: detalhes sob demanda (GET /api/orders/:id). O pedido vem da
+  // lista autorizada; o backend refaz o ownership (404 p/ pedido alheio).
+  if (isStorefrontAuthApiEnabled()) {
+    if (details.hidden) {
+      openOrderDetailsApi(id, details, toggle);
+    } else {
+      details.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+      announce(`Detalhes do pedido ${id} fechados.`);
+    }
+    return;
+  }
 
   const willOpen = details.hidden;
   details.hidden = !willOpen;
@@ -1311,6 +1601,14 @@ function bindEvents() {
 
   const pedidosList = document.getElementById("pedidos-list");
   if (pedidosList) pedidosList.addEventListener("click", handlePedidosClick);
+
+  const pedidosRetry = document.getElementById("pedidos-retry");
+  if (pedidosRetry) {
+    pedidosRetry.addEventListener("click", () => {
+      state.ordersState = "idle";
+      renderPedidos();
+    });
+  }
 
   const prefsForm = document.getElementById("prefs-form");
   if (prefsForm) prefsForm.addEventListener("change", handlePrefChange);
