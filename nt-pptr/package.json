@@ -1,0 +1,12 @@
+{
+  "name": "nexus-tech-pptr-fase7",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Suítes Puppeteer da FASE 7 (auth real do storefront) do NEXUS TECH",
+  "scripts": {
+    "test:login": "node test-login-api.js"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^23.11.1"
+  }
+}

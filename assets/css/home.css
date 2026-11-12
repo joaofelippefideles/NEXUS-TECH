@@ -305,3 +305,22 @@
     height: 220px;
   }
 }
+
+/* --------------------------------------------------------------------------
+   CARDS DA HOME — placeholder de imagem
+   Substitui o texto "(imagem)" por um bloco visual consistente com o SVG
+   ilustrativo do catálogo (gradiente + inicial da categoria).
+-------------------------------------------------------------------------- */
+
+.product-card__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-family-brand);
+  font-weight: var(--font-black);
+  font-size: var(--text-5xl);
+  color: rgba(255, 255, 255, 0.95);
+  background-image: linear-gradient(135deg, #0e7490 0%, #6d28d9 100%);
+}
